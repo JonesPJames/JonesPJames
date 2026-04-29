@@ -1,0 +1,145 @@
+{
+  "project_name": "Řemeslník Pro 1.0",
+  "domain": "Construction & Trades (Quotes, Site Diary, Calculators)",
+  "theme": "Light",
+  "archetype": "1 (Organic & Earthy)",
+  "design_philosophy": "Rugged usability with a warm, clean aesthetic. Prioritizes massive touch targets (60px+) for gloved hands, high legibility in outdoor glare, and single-purpose clear actions. No overly techy gradients. Paper & clipboard translated to a premium digital experience.",
+  "colors": {
+    "background": {
+      "default": "#f4f1eb",
+      "surface": "#ffffff",
+      "surface_muted": "#fbfbf9"
+    },
+    "primary": {
+      "default": "#c9820a",
+      "hover": "#b37309",
+      "light": "#fcede3"
+    },
+    "text": {
+      "main": "#2d2926",
+      "muted": "#68635c",
+      "inverse": "#ffffff"
+    },
+    "border": {
+      "default": "#e2ded7",
+      "focus": "#c9820a"
+    },
+    "status": {
+      "rozpracovano": { "bg": "#e5e3df", "text": "#5c5853" },
+      "schvaleno": { "bg": "#e3f0e8", "text": "#315942" },
+      "odlozeno": { "bg": "#fcede3", "text": "#945f06" },
+      "dokonceno": { "bg": "#e0edf2", "text": "#244d5a" },
+      "expirovano": { "bg": "#f5e1e1", "text": "#822c22" }
+    }
+  },
+  "typography": {
+    "font_families": {
+      "heading": "Outfit, sans-serif",
+      "body": "Manrope, sans-serif"
+    },
+    "scales": {
+      "h1": "text-4xl font-bold tracking-tight text-[#2d2926] leading-tight",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight text-[#2d2926]",
+      "h3": "text-xl font-semibold text-[#2d2926]",
+      "body_lg": "text-lg text-[#2d2926] leading-relaxed",
+      "body": "text-base text-[#68635c] leading-relaxed",
+      "small": "text-sm text-[#68635c]",
+      "overline": "text-xs font-bold uppercase tracking-widest text-[#68635c]"
+    }
+  },
+  "spacing_and_layout": {
+    "container": "w-full max-w-md mx-auto min-h-screen bg-[#f4f1eb]",
+    "card_padding": "p-6 sm:p-8",
+    "section_gap": "gap-6 sm:gap-8",
+    "touch_targets": "min-h-[60px] md:min-h-[56px] (Critical for gloved hands)",
+    "radii": {
+      "card": "rounded-2xl",
+      "button": "rounded-xl",
+      "input": "rounded-xl",
+      "tag": "rounded-full"
+    },
+    "shadows": {
+      "card": "shadow-[0_4px_24px_rgba(45,41,38,0.04)]",
+      "floating_action": "shadow-[0_8px_32px_rgba(201,130,10,0.25)]"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "w-full min-h-[60px] bg-[#c9820a] hover:bg-[#b37309] text-white font-bold text-lg rounded-xl flex items-center justify-center transition-colors shadow-sm",
+      "secondary": "w-full min-h-[60px] bg-white border-2 border-[#e2ded7] hover:border-[#c9820a] text-[#2d2926] font-bold text-lg rounded-xl flex items-center justify-center transition-colors",
+      "ghost": "w-full min-h-[60px] text-[#68635c] hover:text-[#c9820a] font-semibold text-base rounded-xl flex items-center justify-center"
+    },
+    "cards": {
+      "base": "bg-white rounded-2xl p-6 shadow-[0_4px_24px_rgba(45,41,38,0.04)] border border-[#e2ded7] flex flex-col relative overflow-hidden",
+      "interactive": "hover:shadow-[0_8px_32px_rgba(45,41,38,0.08)] transition-shadow cursor-pointer hover:border-[#c9820a]/30 active:scale-[0.98]"
+    },
+    "inputs": {
+      "text": "w-full min-h-[56px] bg-[#fbfbf9] border border-[#e2ded7] focus:border-[#c9820a] focus:ring-2 focus:ring-[#c9820a]/20 rounded-xl px-4 text-lg text-[#2d2926] placeholder:text-[#8c857b] transition-all outline-none"
+    },
+    "tags": {
+      "status": "inline-flex items-center px-3 py-1 rounded-full text-sm font-bold whitespace-nowrap"
+    }
+  },
+  "screens": {
+    "login_register": {
+      "layout": "Full height split or overlaid. Background uses login_bg image with heavy off-white gradient fade at bottom to blend into #f4f1eb. Form sits in a white card.",
+      "features": ["Logo/Brand name", "Email/Password inputs", "Name, Company Name, Phone number (for register)", "Large primary Login/Register button"]
+    },
+    "home_menu": {
+      "layout": "Header with Profile (Name + Phone) and Logout. Main area is a 2-column (or 1-column on very small screens) 'Bento' grid.",
+      "features": ["1. Adresář zakázek (Job Directory)", "2. Nová zakázka (New Quote)", "3. Stavební deník (Site Diary)", "4. Celkové vyúčtování (Final Billing)", "5. Kalkulačka prací (Calculator)", "6. Generátor nabídek (AI Quotes)"]
+    },
+    "adresar_zakazek": {
+      "layout": "List view. Sticky top search bar and horizontally scrollable filter chips (Vše, Rozpracováno, etc).",
+      "features": ["Search input", "Filter chips", "List of cards. Each card has title, date, and status tag.", "Odloženo status tag must show a countdown."]
+    },
+    "nova_zakazka": {
+      "layout": "Long scrolling form. Sticky bottom or top 'Summary Card' (Cena práce, materiál, doprava, Celkem).",
+      "features": ["Inputs: Client, Address, Auto job # (YYYY-NNN), Date, Title.", "3 expanding line-item tables (Práce, Materiál, Doprava) with add/remove rows.", "Status action buttons", "PDF download button"]
+    },
+    "stavebni_denik": {
+      "layout": "Chronological feed/list of daily entries.",
+      "features": ["Date, work done, weather, workers count, notes.", "Photo upload section (camera button).", "Extra tables for 'Vícepráce' (Extra work) and 'Materiál navíc'."]
+    },
+    "celkove_vyuctovani": {
+      "layout": "Multi-section read+edit view.",
+      "features": ["Sections: Original quote, Vícepráce, Diary excerpt, Recap.", "Photo URL rendering as camera icon button.", "Massive 'Finalizovat a uzamknout' (Finalize & Lock) button."]
+    },
+    "kalkulacka_praci": {
+      "layout": "Trade selection grid (Zedník, Obkladač, etc.) leading to preset item lists.",
+      "features": ["Editable quantity/price inputs per preset.", "Add custom row.", "Total calculation", "Export to Nová zakázka CTA."]
+    },
+    "generator_nabidek": {
+      "layout": "Input form with sliders/chips -> AI generation -> 3-variant card carousel or stacked cards.",
+      "features": ["Inputs: Náročnost, Urgence, Typ klienta.", "AI descriptive text.", "3 output cards: Základní (Bronze), Zlatá střední cesta (Gold), Premium (Diamond).", "Generate PDF button."]
+    }
+  },
+  "media_and_icons": {
+    "icon_library": "@phosphor-icons/react (Duotone weight for soft, premium feel)",
+    "image_urls": {
+      "login_bg": {
+        "url": "https://static.prod-images.emergentagent.com/jobs/5e6d38c7-235c-4d65-800c-78c299b1647b/images/224ccb30c81796fcfe48d02c57f69a77b3eb76023f5f429eeed18b461ffd6415.png",
+        "description": "Minimalist architectural background with warm sunlight hitting textured plaster. Use as full-screen background on Login/Register, obscured heavily by the white login form card."
+      },
+      "app_logo": {
+        "url": "https://static.prod-images.emergentagent.com/jobs/5e6d38c7-235c-4d65-800c-78c299b1647b/images/8350f27e451d81e21eb2ecf5bd71f8439527e1ca4bf0b48418f496814f37c63b.png",
+        "description": "App logo icon. Use in Header or Login screen."
+      },
+      "empty_state_tasks": {
+        "url": "https://static.prod-images.emergentagent.com/jobs/5e6d38c7-235c-4d65-800c-78c299b1647b/images/1ef94273e4a7746134017d94df84960cf906176106253fd34a68a90f6193e212.png",
+        "description": "Empty state illustration. Use when lists (Adresář zakázek, Stavební deník) are empty."
+      }
+    }
+  },
+  "instructions_to_main_agent": [
+    "Tech Stack: React (frontend web but styled as mobile-first PWA), Tailwind CSS, Shadcn/UI primitives. NO .tsx extensions, strictly use .jsx or .js as requested by user constraints.",
+    "Mobile-first Layout: The entire app must be constrained to 'w-full max-w-md mx-auto min-h-screen bg-[#f4f1eb]' to simulate an Expo React Native environment on web browsers. Add 'pb-24' for bottom scrolling clearance.",
+    "Interaction: EVERY button, input, or clickable card MUST have a minimum height of 60px (h-[60px] or min-h-[60px]). Construction workers wear gloves; small targets are unacceptable.",
+    "Localization: Language must be exactly Czech. Currency is 'Kč' (format as 1 000 Kč). Dates are D. M. YYYY.",
+    "Testing: Add 'data-testid' to ALL interactive elements (e.g., data-testid='login-btn', data-testid='nav-adresari'). Use kebab-case.",
+    "Data Structure: Use a local mock store or state for the tables in 'Nová zakázka' so rows can actually be added/removed in the MVP.",
+    "Icons: Run 'yarn add @phosphor-icons/react' and use Duotone variants for a premium, clean look.",
+    "Do NOT use pure black. Always use text-[#2d2926] for high contrast that isn't harsh.",
+    "Shadows: Never use default dark shadows. Use the tinted shadows provided in the spacing_and_layout configuration to maintain the warm aesthetic."
+  ]
+}
