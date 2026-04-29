@@ -31,6 +31,8 @@ export default function ZakazkaDetail() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [matSearch, setMatSearch] = useState("");
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [saving, setSaving] = useState(false);
   const saveTimer = useRef<any>(null);
 
   async function load() {
@@ -59,6 +61,7 @@ export default function ZakazkaDetail() {
   }
 
   async function persist(j: any) {
+    setSaving(true);
     try {
       const payload: any = {
         client_name: j.client_name,
@@ -75,9 +78,12 @@ export default function ZakazkaDetail() {
       };
       const r = await api.put(`/jobs/${j.id}`, payload);
       setJob(r.data);
+      setSavedAt(new Date());
     } catch (e: any) {
       // silent for autosave
       console.warn("autosave fail", getApiErrorMessage(e));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -178,6 +184,28 @@ export default function ZakazkaDetail() {
       <AppHeader title={job.job_number} back />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          {/* Save indicator */}
+          <View style={styles.saveBar} testID="save-indicator">
+            {saving ? (
+              <>
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+                <Text style={styles.saveBarText}>Ukládám…</Text>
+              </>
+            ) : savedAt ? (
+              <>
+                <Ionicons name="checkmark-circle" size={16} color="#315942" />
+                <Text style={styles.saveBarText}>
+                  Uloženo • {savedAt.getHours().toString().padStart(2, "0")}:{savedAt.getMinutes().toString().padStart(2, "0")}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="cloud-done-outline" size={16} color={theme.colors.textMuted} />
+                <Text style={styles.saveBarText}>Změny se ukládají automaticky</Text>
+              </>
+            )}
+          </View>
+
           {/* Status & summary */}
           <View style={[styles.summaryCard, { backgroundColor: theme.colors.text }]} testID="summary-card">
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -302,6 +330,20 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.bg },
   container: { padding: 16, paddingBottom: 60 },
+  saveBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 12,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  saveBarText: { color: theme.colors.textMuted, fontSize: 12, fontWeight: "600" },
   summaryCard: {
     borderRadius: theme.radius.card,
     padding: 18,
