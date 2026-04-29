@@ -1,0 +1,41 @@
+{
+  "summary": "First testing iteration for Řemeslník Pro 1.0 (Czech mobile app for tradespeople). Backend 16/16 pytest cases PASS including JWT auth, job lifecycle (create→schvaleno→odlozeno→dokonceno→finalize), totals/vícepráce computation, renew, diary entries, PDFs (quote + billing + variants) with DejaVu Czech diacritics and ?token= fallback, AI integration via emergentintegrations + claude-sonnet-4-5-20250929 (material price, enhance description, generate-3-variants), and remeslnik-ai import. Frontend Expo web preview loads correctly: login → home (6 tiles) → adresar → zakazka detail → kalkulacka (11 trades) → generator → profil → import → nova-zakazka all render with full testID coverage and mobile viewport (390x844).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "all", "issues": ["React Native Web emits 'shadow*' style deprecation warnings (use boxShadow). Cosmetic only."]}
+    ],
+    "react_native_issues": [
+      {"component": "expo-image-picker", "issue": "Version 55.0.19 vs Expo-expected ~17.0.11 — startup warning, but does not block (used only in denik photo picker). Inform main agent in case OTA Expo Go behavior differs."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_remeslnik.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optional: address 'shadow*' deprecation by migrating shadowColor/shadowOffset/shadowOpacity/shadowRadius to boxShadow on web.",
+    "Optional: align expo-image-picker version with Expo SDK (run `npx expo install expo-image-picker`) to remove the version-mismatch warning."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 890 lines — could be split into routers (auth, jobs, ai, pdf, import) for maintainability, but currently functional.",
+    "AI endpoints have 5–15s latency — frontend should already show ActivityIndicator (verified on /generator g-ai-enhance and ai-mat-btn).",
+    "_id is correctly excluded everywhere via projection {_id: 0} or serialize_job pop.",
+    "JWT secret loaded from env, bcrypt password_hash format $2b$… verified."
+  ],
+  "updated_files": [
+    "/app/backend/tests/__init__.py (created)",
+    "/app/backend/tests/test_remeslnik.py (created)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% on smoke flows tested"},
+  "seed_data_creation": "Tests created 2 jobs under admin (2026-001 finalized, 2026-002 empty) and a few TEST_*@example.cz registered users via register flow.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend URL is https://tradesmen-quotes.preview.emergentagent.com (not the one in the original review_request). Admin admin@remeslnikpro.cz / admin123 auto-seeded. After any code change run `sudo supervisorctl restart expo` because Metro can serve a stale 'Unmatched Route' for newly added screens until restart — this caused initial false-negative on /kalkulacka and /generator. Regression suite at /app/backend/tests/test_remeslnik.py (pytest, 16 tests, ~40 s including 2 Claude calls).",
+  "rca_of_issue": "Initial run showed /kalkulacka and /generator as 'Unmatched Route' even though files existed. Root cause: Metro bundler had a stale route manifest cached from earlier hot-reload churn (multiple 'Premature close' / WatchFiles reload errors visible in /var/log/supervisor/expo.err.log). Mitigation: `sudo supervisorctl restart expo`; after restart all 6 home tiles route correctly to their screens. No code change required."
+}
