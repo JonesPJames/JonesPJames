@@ -149,8 +149,8 @@ export default function Generator() {
           {bundle?.variants ? (
             <View style={{ marginTop: 18 }}>
               {bundle.variants.map((v: any, i: number) => (
-                <View key={i} style={[styles.variant, { borderColor: VARIANT_COLORS[i] }]} testID={`variant-${i}`}>
-                  <View style={[styles.variantHeader, { backgroundColor: VARIANT_COLORS[i] }]}>
+                <View key={i} style={styles.variant} testID={`variant-${i}`}>
+                  <View style={styles.variantHeader}>
                     <Text style={styles.variantIcon}>{ICONS[i]}</Text>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.variantName}>{v.nazev}</Text>
@@ -267,14 +267,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.card,
     marginBottom: 12,
-    borderWidth: 2,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     overflow: "hidden",
-    ...theme.shadow.card,
   },
-  variantHeader: { flexDirection: "row", alignItems: "center", padding: 14, gap: 10 },
+  variantHeader: { flexDirection: "row", alignItems: "center", padding: 16, gap: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: theme.colors.surfaceMuted },
   variantIcon: { fontSize: 28 },
-  variantName: { color: "#fff", fontSize: 17, fontWeight: "800" },
-  variantPrice: { color: "#fff", fontSize: 22, fontWeight: "800" },
+  variantName: { color: theme.colors.text, fontSize: 17, fontWeight: "800" },
+  variantPrice: { color: theme.colors.text, fontSize: 24, fontWeight: "800", marginTop: 2 },
   popis: { color: theme.colors.text, fontSize: 14, marginBottom: 10 },
   metaRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
   metaCell: { flex: 1, backgroundColor: theme.colors.primaryLight, borderRadius: 10, padding: 10 },

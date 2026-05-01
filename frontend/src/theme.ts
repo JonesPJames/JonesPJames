@@ -1,60 +1,72 @@
 /**
- * Theme tokens for Řemeslník Pro 1.0
- * Based on /app/design_guidelines.json (Organic & Earthy archetype)
+ * Řemeslník Pro 1.0 — REDESIGNED theme
+ * Minimalist, industrial, monochrome with dark charcoal as primary.
+ * Maximum contrast for outdoor legibility on a construction site.
  */
 export const theme = {
   colors: {
-    bg: "#f4f1eb",
+    // Backgrounds — clean white/near-white, no warm tint
+    bg: "#fafafa",
     surface: "#ffffff",
-    surfaceMuted: "#fbfbf9",
-    primary: "#c9820a",
-    primaryHover: "#b37309",
-    primaryLight: "#fcede3",
-    text: "#2d2926",
-    textMuted: "#68635c",
+    surfaceMuted: "#f5f5f5",
+
+    // Primary — industrial charcoal (replaces orange)
+    primary: "#1f1f1f",
+    primaryHover: "#000000",
+    primaryLight: "#f0f0f0",
+
+    // Typography — near-black for max contrast
+    text: "#0a0a0a",
+    textMuted: "#6b6b6b",
     textInverse: "#ffffff",
-    border: "#e2ded7",
-    borderFocus: "#c9820a",
-    placeholder: "#8c857b",
+
+    // Structural lines
+    border: "#e5e5e5",
+    borderFocus: "#1f1f1f",
+    placeholder: "#9ca3af",
+
+    // Status — muted pastel backgrounds + strong dark text for max legibility
     status: {
-      rozpracovano: { bg: "#e5e3df", text: "#5c5853" },
-      schvaleno: { bg: "#e3f0e8", text: "#315942" },
-      odlozeno: { bg: "#fcede3", text: "#945f06" },
-      dokonceno: { bg: "#e0edf2", text: "#244d5a" },
-      expirovano: { bg: "#f5e1e1", text: "#822c22" },
+      rozpracovano: { bg: "#ededed", text: "#3f3f3f" },
+      schvaleno: { bg: "#dcfce7", text: "#14532d" },
+      odlozeno: { bg: "#fef3c7", text: "#78350f" },
+      dokonceno: { bg: "#dbeafe", text: "#1e3a8a" },
+      expirovano: { bg: "#fee2e2", text: "#7f1d1d" },
     },
-    danger: "#822c22",
+
+    danger: "#991b1b",
+    success: "#14532d",
   },
-  radius: { card: 20, button: 14, input: 14, tag: 999 },
+  radius: { card: 16, button: 12, input: 12, tag: 999 },
   spacing: { xs: 4, s: 8, m: 12, l: 16, xl: 20, xxl: 24, xxxl: 32 },
   shadow: {
     card: {
-      shadowColor: "#2d2926",
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.06,
-      shadowRadius: 12,
-      elevation: 2,
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.04,
+      shadowRadius: 4,
+      elevation: 1,
     },
     floating: {
-      shadowColor: "#c9820a",
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.25,
-      shadowRadius: 16,
-      elevation: 6,
+      shadowColor: "#000000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.18,
+      shadowRadius: 12,
+      elevation: 4,
     },
   },
   typography: {
-    h1: { fontSize: 28, fontWeight: "800" as const, color: "#2d2926" },
-    h2: { fontSize: 22, fontWeight: "700" as const, color: "#2d2926" },
-    h3: { fontSize: 17, fontWeight: "700" as const, color: "#2d2926" },
-    body: { fontSize: 15, color: "#2d2926" },
-    bodyMuted: { fontSize: 14, color: "#68635c" },
-    small: { fontSize: 12, color: "#68635c" },
+    h1: { fontSize: 30, fontWeight: "800" as const, color: "#0a0a0a" },
+    h2: { fontSize: 24, fontWeight: "800" as const, color: "#0a0a0a" },
+    h3: { fontSize: 19, fontWeight: "700" as const, color: "#0a0a0a" },
+    body: { fontSize: 16, color: "#0a0a0a" },
+    bodyMuted: { fontSize: 15, color: "#6b6b6b" },
+    small: { fontSize: 13, color: "#6b6b6b" },
     overline: {
       fontSize: 11,
-      fontWeight: "700" as const,
-      color: "#68635c",
-      letterSpacing: 1.4,
+      fontWeight: "800" as const,
+      color: "#6b6b6b",
+      letterSpacing: 1.6,
       textTransform: "uppercase" as const,
     },
   },

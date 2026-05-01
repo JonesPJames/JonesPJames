@@ -207,13 +207,16 @@ export default function ZakazkaDetail() {
           </View>
 
           {/* Status & summary */}
-          <View style={[styles.summaryCard, { backgroundColor: theme.colors.text }]} testID="summary-card">
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={styles.sumOverline}>Cenová nabídka</Text>
+          <View style={styles.summaryCard} testID="summary-card">
+            <View style={styles.summaryHeader}>
+              <View>
+                <Text style={styles.sumOverline}>Cenová nabídka</Text>
+                <Text style={styles.sumNumber}>{job.job_number}</Text>
+                <Text style={styles.sumDate}>{fmtDateCZ(job.created_at)}</Text>
+              </View>
               <StatusBadge status={status} daysLeft={job.days_left} />
             </View>
-            <Text style={styles.sumNumber}>{job.job_number}</Text>
-            <Text style={styles.sumDate}>{fmtDateCZ(job.created_at)}</Text>
+
             <View style={styles.sumGrid}>
               <View style={styles.sumCell}>
                 <Text style={styles.sumLabel}>Práce</Text>
@@ -228,6 +231,7 @@ export default function ZakazkaDetail() {
                 <Text style={styles.sumVal}>{fmtCZK(totals.cena_doprava)}</Text>
               </View>
             </View>
+
             <View style={styles.sumTotalRow}>
               <Text style={styles.sumTotalLabel}>CELKEM</Text>
               <Text style={styles.sumTotalVal}>{fmtCZK(totals.celkem)}</Text>
@@ -345,40 +349,44 @@ const styles = StyleSheet.create({
   },
   saveBarText: { color: theme.colors.textMuted, fontSize: 12, fontWeight: "600" },
   summaryCard: {
+    backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.card,
-    padding: 18,
+    padding: 20,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
+  summaryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
   sumOverline: {
-    color: "#c9820a",
+    color: theme.colors.textMuted,
     fontSize: 11,
     fontWeight: "800",
-    letterSpacing: 1.4,
+    letterSpacing: 1.6,
     textTransform: "uppercase",
   },
-  sumNumber: { color: "#fff", fontSize: 24, fontWeight: "800", marginTop: 4 },
-  sumDate: { color: "#bbb6ad", fontSize: 12, marginTop: 2 },
-  sumGrid: { flexDirection: "row", gap: 8, marginTop: 14 },
+  sumNumber: { color: theme.colors.text, fontSize: 26, fontWeight: "800", marginTop: 4 },
+  sumDate: { color: theme.colors.textMuted, fontSize: 13, marginTop: 2 },
+  sumGrid: { flexDirection: "row", gap: 8, marginTop: 18 },
   sumCell: {
     flex: 1,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 10,
-    padding: 10,
+    padding: 12,
   },
-  sumLabel: { color: "#bbb6ad", fontSize: 11, fontWeight: "600", marginBottom: 4 },
-  sumVal: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  sumLabel: { color: theme.colors.textMuted, fontSize: 11, fontWeight: "700", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.8 },
+  sumVal: { color: theme.colors.text, fontSize: 15, fontWeight: "700" },
   sumTotalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 14,
-    backgroundColor: theme.colors.primary,
-    padding: 12,
-    borderRadius: 12,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 2,
+    borderTopColor: theme.colors.text,
   },
-  sumTotalLabel: { color: "#fff", fontSize: 14, fontWeight: "800", letterSpacing: 1.2 },
-  sumTotalVal: { color: "#fff", fontSize: 22, fontWeight: "800" },
-  expiry: { color: "#fcede3", fontSize: 12, marginTop: 8, textAlign: "center" },
+  sumTotalLabel: { color: theme.colors.text, fontSize: 14, fontWeight: "800", letterSpacing: 1.4 },
+  sumTotalVal: { color: theme.colors.text, fontSize: 28, fontWeight: "800" },
+  expiry: { color: theme.colors.textMuted, fontSize: 13, marginTop: 10, textAlign: "center" },
   section: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.card,

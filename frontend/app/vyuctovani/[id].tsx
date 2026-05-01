@@ -149,9 +149,8 @@ export default function Vyuctovani() {
 
           <Text style={styles.sectionTitle}>Sekce 4 — Rekapitulace</Text>
           <View style={styles.recapCard}>
-            <Row label="Původní nabídka celkem" value={fmtCZK(original)} light />
-            <Row label="Vícepráce celkem" value={fmtCZK(extra)} light />
-            <View style={styles.divider} />
+            <Row label="Původní nabídka celkem" value={fmtCZK(original)} />
+            <Row label="Vícepráce celkem" value={fmtCZK(extra)} />
             <View style={styles.bigTotal}>
               <Text style={styles.bigTotalLabel}>CELKEM K FAKTURACI</Text>
               <Text style={styles.bigTotalVal}>{fmtCZK(original + extra)}</Text>
@@ -243,21 +242,23 @@ const styles = StyleSheet.create({
   },
   hint: { color: theme.colors.textMuted, fontSize: 12, fontStyle: "italic", marginTop: 6 },
   recapCard: {
-    backgroundColor: theme.colors.text,
+    backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.card,
-    padding: 16,
+    padding: 20,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
-  divider: { height: 1, backgroundColor: "rgba(255,255,255,0.1)", marginVertical: 8 },
+  divider: { height: 1, backgroundColor: theme.colors.border, marginVertical: 12 },
   bigTotal: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: theme.colors.primary,
-    padding: 14,
-    borderRadius: 12,
-    marginTop: 8,
+    paddingTop: 14,
+    borderTopWidth: 2,
+    borderTopColor: theme.colors.text,
+    marginTop: 4,
   },
-  bigTotalLabel: { color: "#fff", fontWeight: "800", fontSize: 13, letterSpacing: 1.2 },
-  bigTotalVal: { color: "#fff", fontWeight: "800", fontSize: 22 },
+  bigTotalLabel: { color: theme.colors.text, fontWeight: "800", fontSize: 14, letterSpacing: 1.4 },
+  bigTotalVal: { color: theme.colors.text, fontWeight: "800", fontSize: 28 },
 });
