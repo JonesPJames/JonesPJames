@@ -459,49 +459,133 @@ class GenerateVariantsIn(BaseModel):
 
 @api.post("/ai/generate-variants")
 async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends(get_current_user)):
+    # ---------- 1) Compute STRICT target prices server-side ----------
+    base = float(payload.cena_material + payload.cena_prace + payload.cena_doprava)
+    if base <= 0:
+        # fallback for purely descriptive entries — minimum 50 000 Kč baseline
+        base = 50000.0
+
+    # Premium factors (applied to A only, never below 1.0)
+    narocnost_mult = {"nizka": 1.00, "stredni": 1.04, "vysoka": 1.10}[payload.narocnost]
+    urgence_mult = {"bezna": 1.00, "zvysena": 1.06, "expresni": 1.15}[payload.urgence]
+    klient_mult = {"bezny": 1.00, "firemni": 1.03, "vip": 1.08}[payload.typ_klienta]
+    a_factor = max(1.0, narocnost_mult * urgence_mult * klient_mult)
+
+    # Pick spreads inside the allowed bands
+    # B must be > A and ≤ A * 1.15  → pick +10 %
+    # C must be > B and ≤ B * 1.20  → pick +15 %
+    b_spread = 0.10
+    c_spread = 0.15
+    # On expresní + vip we widen toward the limits to feel realistic
+    if payload.urgence == "expresni":
+        b_spread = 0.13
+    if payload.typ_klienta == "vip":
+        c_spread = 0.18
+
+    def round_clean(n: float) -> float:
+        # Round to nearest 100 Kč for natural-looking prices
+        return float(int(round(n / 100.0) * 100))
+
+    A = round_clean(base * a_factor)
+    if A < base:
+        A = round_clean(base)
+    B = round_clean(A * (1.0 + b_spread))
+    if B <= A:
+        B = A + 100.0
+    if B > A * 1.15:
+        B = round_clean(A * 1.15)
+        if B <= A:
+            B = A + 100.0
+    C = round_clean(B * (1.0 + c_spread))
+    if C <= B:
+        C = B + 100.0
+    if C > B * 1.20:
+        C = round_clean(B * 1.20)
+        if C <= B:
+            C = B + 100.0
+
+    # ---------- 2) Ask AI to write only descriptions/scope (NOT prices) ----------
     sys = (
         "Jsi expert na cenotvorbu a tvorbu nabídek pro české řemeslné firmy. "
         "Vytvoř TŘI varianty nabídky ve formátu JSON pole se 3 prvky a NIC JINÉHO. "
-        "Každý prvek má klíče: nazev, cena_kc (číslo), rozsah (string odrážky), zaruka, "
-        "termin, included (pole stringů, 4-6 položek), excluded (pole stringů, 2-4 položky), "
-        "popis (1-2 věty)."
-        "Varianta 1 = 'Základní' (nejnižší cena, minimální rozsah, krátká záruka 12 měsíců). "
-        "Varianta 2 = 'Zlatá střední cesta' (doporučená, vyvážený poměr). "
-        "Varianta 3 = 'Premium' (rozšířený rozsah, prémiové materiály, 60 měsíců záruka). "
-        "Jazyk: česky. Měna: Kč. Vrať POUZE validní JSON pole."
+        "Klíče v každém prvku: nazev, rozsah (string s odrážkami oddělenými novým řádkem), "
+        "zaruka (string, např. '24 měsíců'), termin (string, např. '4-6 týdnů'), "
+        "included (pole 4-6 stringů), excluded (pole 2-4 stringů), popis (1-2 věty co odlišuje variantu). "
+        "Varianta 1 = 'Základní' — pouze nezbytný rozsah, standardní materiály, kratší záruka (24 měsíců). "
+        "Varianta 2 = 'Zlatá střední cesta' — DOPORUČENÁ. Vyšší cena ospravedlněná: kvalitnější materiály, "
+        "důkladnější příprava povrchů, prodloužená záruka (36 měsíců), drobné nadstandardní detaily. "
+        "Varianta 3 = 'Premium' — Prémiové značkové materiály, rozšířený rozsah včetně dodatečných úprav, "
+        "dlouhá záruka (60 měsíců), prioritní termín a servis, finální úklid. "
+        "POZOR: Ceny NEZADÁVEJ — vrať pouze obsah. Jazyk: česky. "
+        "Vrať POUZE validní JSON pole."
     )
-    base = (payload.cena_material + payload.cena_prace + payload.cena_doprava) or 50000
-    multiplier = {"nizka": 1.0, "stredni": 1.0, "vysoka": 1.15}[payload.narocnost]
-    urgency = {"bezna": 1.0, "zvysena": 1.1, "expresni": 1.25}[payload.urgence]
-    klient = {"bezny": 1.0, "firemni": 1.05, "vip": 1.15}[payload.typ_klienta]
-    base = base * multiplier * urgency * klient
 
+    diff_b_pct = round((B / A - 1.0) * 100)
+    diff_c_pct = round((C / B - 1.0) * 100)
     prompt = (
-        f"Název: {payload.title}\nKlient: {payload.client} ({payload.typ_klienta})\n"
+        f"Název: {payload.title}\nKlient: {payload.client} (typ: {payload.typ_klienta})\n"
         f"Adresa: {payload.address}\nNáročnost: {payload.narocnost}\nUrgence: {payload.urgence}\n"
-        f"Vstupní rozpočet (orientační): {int(base)} Kč\n"
-        f"Popis: {payload.description}\n"
-        f"Vytvoř 3 varianty: Základní (~{int(base*0.85)} Kč), "
-        f"Zlatá střední cesta (~{int(base)} Kč), Premium (~{int(base*1.35)} Kč)."
+        f"Vstupní podklad — kalkulovaná základní cena: {int(base)} Kč "
+        f"(práce {int(payload.cena_prace)} + materiál {int(payload.cena_material)} + doprava {int(payload.cena_doprava)})\n"
+        f"Popis: {payload.description}\n\n"
+        f"Tři varianty mají tyto pevné ceny (Kč):\n"
+        f"  A Základní: {int(A)}\n"
+        f"  B Zlatá střední cesta: {int(B)} (+{diff_b_pct} % oproti A)\n"
+        f"  C Premium: {int(C)} (+{diff_c_pct} % oproti B)\n\n"
+        f"V popisu varianty B vysvětli, v čem konkrétně dává smysl utratit těch +{diff_b_pct} % "
+        f"(typicky lepší materiály, prodloužená záruka, důkladnější detaily). "
+        f"V popisu varianty C vysvětli, v čem dává smysl těch +{diff_c_pct} % oproti B "
+        f"(prémiové značkové materiály, dlouhá záruka, prioritní termín)."
     )
     try:
         out = await _llm_call(sys, prompt)
         import json, re
-        # extract JSON array
         m = re.search(r"\[.*\]", out, re.S)
         if not m:
             raise ValueError("AI nevrátila JSON")
-        variants = json.loads(m.group(0))
-        # save bundle
+        variants_raw = json.loads(m.group(0))
+        if not isinstance(variants_raw, list) or len(variants_raw) < 3:
+            raise ValueError("AI nevrátila 3 varianty")
+
+        # ---------- 3) Force prices server-side to guarantee compliance ----------
+        prices = [A, B, C]
+        defaults_nazev = ["🥉 Základní", "🥇 Zlatá střední cesta", "💎 Premium"]
+        variants = []
+        for i, v in enumerate(variants_raw[:3]):
+            if not isinstance(v, dict):
+                v = {}
+            v["cena_kc"] = float(prices[i])
+            v["nazev"] = v.get("nazev") or defaults_nazev[i]
+            v["rozsah"] = v.get("rozsah", "")
+            v["zaruka"] = v.get("zaruka") or ["24 měsíců", "36 měsíců", "60 měsíců"][i]
+            v["termin"] = v.get("termin") or ["4-6 týdnů", "3-5 týdnů", "2-4 týdny (priorita)"][i]
+            v["included"] = v.get("included") or []
+            v["excluded"] = v.get("excluded") or []
+            v["popis"] = v.get("popis", "")
+            variants.append(v)
+
+        # Hard-validate the math invariants (guard against rare edge cases)
+        if not (variants[0]["cena_kc"] >= base):
+            variants[0]["cena_kc"] = round_clean(base)
+        if not (variants[1]["cena_kc"] > variants[0]["cena_kc"]):
+            variants[1]["cena_kc"] = variants[0]["cena_kc"] + 100
+        if not (variants[1]["cena_kc"] <= variants[0]["cena_kc"] * 1.15):
+            variants[1]["cena_kc"] = round_clean(variants[0]["cena_kc"] * 1.15)
+        if not (variants[2]["cena_kc"] > variants[1]["cena_kc"]):
+            variants[2]["cena_kc"] = variants[1]["cena_kc"] + 100
+        if not (variants[2]["cena_kc"] <= variants[1]["cena_kc"] * 1.20):
+            variants[2]["cena_kc"] = round_clean(variants[1]["cena_kc"] * 1.20)
+
         bundle_id = str(uuid.uuid4())
         await db.quote_variants.insert_one({
             "id": bundle_id,
             "user_id": user["id"],
             "input": payload.model_dump(),
+            "base_price": base,
             "variants": variants,
             "created_at": now_utc(),
         })
-        return {"id": bundle_id, "variants": variants}
+        return {"id": bundle_id, "base_price": base, "variants": variants}
     except Exception as e:
         logger.exception("ai_generate_variants failed")
         raise HTTPException(500, f"AI selhala: {e}")
