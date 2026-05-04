@@ -895,11 +895,13 @@ def _gen_pin(existing: set[str]) -> str:
 class EmployeeCreate(BaseModel):
     name: str
     phone: str = ""
+    trade: str = ""  # e.g. "zednik", "obkladac" — controls default tool list
 
 class EmployeeUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     active: Optional[bool] = None
+    trade: Optional[str] = None
 
 class PinLoginIn(BaseModel):
     pin: str
@@ -910,6 +912,7 @@ def public_employee(e: dict) -> dict:
         "name": e.get("name", ""),
         "phone": e.get("phone", ""),
         "pin": e.get("pin", ""),
+        "trade": e.get("trade", ""),
         "active": e.get("active", True),
         "owner_user_id": e.get("owner_user_id"),
     }
@@ -942,6 +945,7 @@ async def create_employee(payload: EmployeeCreate, user: dict = Depends(get_curr
         "name": payload.name,
         "phone": payload.phone,
         "pin": pin,
+        "trade": payload.trade,
         "active": True,
         "created_at": now_utc(),
     }
@@ -1031,6 +1035,7 @@ def _employee_job_view(job: dict) -> dict:
         "diary_entries": job.get("diary_entries", []),
         "vicepracovne_proposals": job.get("vicepracovne_proposals", []),
         "assigned_employee_ids": job.get("assigned_employee_ids", []),
+        "tool_checklists": job.get("tool_checklists", {}),
         "created_at": job.get("created_at"),
     }
 
@@ -1109,6 +1114,60 @@ async def employee_propose(job_id: str, payload: ProposalIn, actor: dict = Depen
     proposals = (job.get("vicepracovne_proposals") or []) + [proposal]
     await db.jobs.update_one({"id": job_id}, {"$set": {"vicepracovne_proposals": proposals, "updated_at": now_utc()}})
     return {"ok": True, "proposal": proposal}
+
+# ---------- Tool Checklist ----------
+class ChecklistIn(BaseModel):
+    trade: str = ""
+    basic_tools: List[str] = []
+    extra_tools: List[str] = []
+
+@api.put("/employee/jobs/{job_id}/checklist")
+async def employee_update_checklist(job_id: str, payload: ChecklistIn, actor: dict = Depends(require_employee)):
+    emp = actor["employee"]
+    job = await db.jobs.find_one(
+        {"id": job_id, "user_id": emp["owner_user_id"], "assigned_employee_ids": emp["id"]}
+    )
+    if not job:
+        raise HTTPException(404, "Zakázka nenalezena nebo nepřiřazena")
+    checklists = job.get("tool_checklists") or {}
+    existing = checklists.get(emp["id"]) or {}
+    if existing.get("confirmed"):
+        raise HTTPException(400, "Checklist je již potvrzen a nelze jej měnit")
+    checklists[emp["id"]] = {
+        "employee_id": emp["id"],
+        "employee_name": emp.get("name", ""),
+        "trade": payload.trade,
+        "basic_tools": payload.basic_tools,
+        "extra_tools": payload.extra_tools,
+        "confirmed": False,
+        "updated_at": now_utc().isoformat(),
+    }
+    await db.jobs.update_one({"id": job_id}, {"$set": {"tool_checklists": checklists, "updated_at": now_utc()}})
+    return {"ok": True, "checklist": checklists[emp["id"]]}
+
+@api.post("/employee/jobs/{job_id}/checklist/confirm")
+async def employee_confirm_checklist(job_id: str, actor: dict = Depends(require_employee)):
+    emp = actor["employee"]
+    job = await db.jobs.find_one(
+        {"id": job_id, "user_id": emp["owner_user_id"], "assigned_employee_ids": emp["id"]}
+    )
+    if not job:
+        raise HTTPException(404, "Zakázka nenalezena nebo nepřiřazena")
+    checklists = job.get("tool_checklists") or {}
+    cur = checklists.get(emp["id"]) or {}
+    if cur.get("confirmed"):
+        raise HTTPException(400, "Checklist je již potvrzen")
+    if not cur.get("basic_tools") and not cur.get("extra_tools"):
+        raise HTTPException(400, "Checklist je prázdný — nejdřív vyberte nebo přidejte nářadí")
+    cur["confirmed"] = True
+    cur["confirmed_at"] = now_utc().isoformat()
+    cur["employee_id"] = emp["id"]
+    cur["employee_name"] = emp.get("name", "")
+    checklists[emp["id"]] = cur
+    await db.jobs.update_one({"id": job_id}, {"$set": {"tool_checklists": checklists, "updated_at": now_utc()}})
+    return {"ok": True, "checklist": cur}
+
+
 
 class ResolveProposalIn(BaseModel):
     action: Literal["approve", "reject"]

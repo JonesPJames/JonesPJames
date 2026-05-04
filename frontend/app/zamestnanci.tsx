@@ -17,8 +17,9 @@ import { Field } from "../src/components/Field";
 import { PrimaryButton } from "../src/components/PrimaryButton";
 import { theme } from "../src/theme";
 import { api, getApiErrorMessage } from "../src/api";
+import { TRADES } from "../src/trades";
 
-type Employee = { id: string; name: string; phone: string; pin: string; active: boolean };
+type Employee = { id: string; name: string; phone: string; pin: string; active: boolean; trade?: string };
 
 export default function ZamestnanciScreen() {
   const [items, setItems] = useState<Employee[]>([]);
@@ -26,6 +27,7 @@ export default function ZamestnanciScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [trade, setTrade] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
   async function load() {
@@ -47,9 +49,10 @@ export default function ZamestnanciScreen() {
     if (!name.trim()) return Alert.alert("Zadejte jméno");
     setBusy(true);
     try {
-      await api.post("/employees", { name: name.trim(), phone: phone.trim() });
+      await api.post("/employees", { name: name.trim(), phone: phone.trim(), trade });
       setName("");
       setPhone("");
+      setTrade("");
       setShowAdd(false);
       await load();
     } catch (e: any) {
@@ -126,6 +129,29 @@ export default function ZamestnanciScreen() {
               <Text style={styles.sheetTitle}>Nový zaměstnanec</Text>
               <Field label="Jméno a příjmení" value={name} onChangeText={setName} testID="emp-name" />
               <Field label="Telefon" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="emp-phone" />
+              <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginBottom: 6, fontWeight: "600" }}>Profese (určuje výchozí nářadí)</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+                {TRADES.map((t) => {
+                  const active = trade === t.key;
+                  return (
+                    <TouchableOpacity
+                      key={t.key}
+                      onPress={() => setTrade(t.key)}
+                      style={{
+                        paddingVertical: 8,
+                        paddingHorizontal: 12,
+                        borderRadius: 999,
+                        backgroundColor: active ? theme.colors.primary : theme.colors.surfaceMuted,
+                        borderWidth: 1,
+                        borderColor: active ? theme.colors.primary : theme.colors.border,
+                      }}
+                      testID={`emp-trade-${t.key}`}
+                    >
+                      <Text style={{ color: active ? "#fff" : theme.colors.text, fontWeight: "700", fontSize: 12 }}>{t.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
               <PrimaryButton title="Vytvořit (PIN se vygeneruje)" onPress={add} loading={busy} testID="emp-save" />
               <View style={{ height: 8 }} />
               <PrimaryButton variant="ghost" title="Zrušit" onPress={() => setShowAdd(false)} />
