@@ -1,4 +1,4 @@
-/** Trade calculator presets (CZ market) + tool checklists per trade. */
+/** Trade calculator presets (CZ market 2026) + tool checklists per trade. */
 export type PresetItem = { popis: string; jednotka: string; cena: number };
 export type Trade = { key: string; name: string; icon: string; items: PresetItem[]; tools: string[] };
 
@@ -14,6 +14,8 @@ const TOOLS: Record<string, string[]> = {
   klempir: ["Klempířské nůžky", "Klempířské kladivo", "Ohýbačka plechu", "Falcovačka", "Nýtovačka", "Aku vrtačka", "Pájka (cín)", "Pásmo", "Žebřík střešní", "Bezpečnostní postroj"],
   dlazdic: ["Lopata", "Hrábě", "Vibrační deska", "Gumová palička", "Vodováha 2 m", "Měřící lať", "Křížky pro dlažbu", "Mokrá pila na dlažbu", "Štípačky na dlažbu", "Kbelíky"],
   zamecnik: ["Aku vrtačka", "Bruska úhlová 125/230", "Svářečka", "Pilník sady", "Ráčna a klíče", "Rázový utahovák", "Vodováha", "Pásmo 5 m", "Kotouče řezné a brusné", "Svářečská kukla a rukavice"],
+  pokryvac: ["Pokrývačské kladivo", "Vytahovák hřebíků", "Nůžky na plech", "Plynový hořák (asfaltové pásy)", "Bezpečnostní postroj a tlumič pádu", "Žebřík střešní / hákový", "Pásmo 5 m", "Tesařský úhelník", "Aku šroubovák", "Štípačky", "Plechová falcovačka", "Kbelík + lano (zdvih materiálu)"],
+  monter: ["Aku vrtačka + příklep", "Sada bitů (PH/PZ/Torx)", "Sada vrtáků do dřeva/kovu/betonu", "Vodováha 60 cm", "Tesařský úhelník", "Gumová palička", "Pilka přímočará", "Excentrická bruska", "Šroubováky ploché a křížové", "Pásmo / metr", "Pistole na silikon", "Děrovač / pila na linku (kuchyně)"],
 };
 
 export const TRADES: Trade[] = [
@@ -93,5 +95,34 @@ export const TRADES: Trade[] = [
       { popis: "Montáž brány", jednotka: "ks", cena: 8500 },
       { popis: "Montáž garážových vrat", jednotka: "ks", cena: 12000 },
       { popis: "Montáž ocelové konstrukce", jednotka: "kg", cena: 95 },
+  ]},
+  { key: "pokryvac", name: "Pokrývač", icon: "home", tools: TOOLS.pokryvac, items: [
+      { popis: "Demontáž staré střešní krytiny", jednotka: "m2", cena: 220 },
+      { popis: "Montáž střešních latí a kontralatí", jednotka: "m2", cena: 180 },
+      { popis: "Pokládka pojistné hydroizolační fólie", jednotka: "m2", cena: 120 },
+      { popis: "Pokládka pálené tašky (skládaná krytina)", jednotka: "m2", cena: 690 },
+      { popis: "Pokládka betonové tašky", jednotka: "m2", cena: 620 },
+      { popis: "Pokládka plechové krytiny (falcovaná / tašková)", jednotka: "m2", cena: 580 },
+      { popis: "Pokládka asfaltového šindele", jednotka: "m2", cena: 480 },
+      { popis: "Montáž hřebenáčů a větracích pásů", jednotka: "bm", cena: 350 },
+      { popis: "Oplechování úžlabí a komínů", jednotka: "bm", cena: 850 },
+      { popis: "Montáž okapového systému (žlaby + svody)", jednotka: "bm", cena: 720 },
+      { popis: "Montáž střešního okna (vč. lemování)", jednotka: "ks", cena: 5800 },
+      { popis: "Montáž sněhových zábran", jednotka: "bm", cena: 480 },
+      { popis: "Doprava a zdvih krytiny na střechu", jednotka: "hod", cena: 750 },
+  ]},
+  { key: "monter", name: "Montér nábytku", icon: "cube", tools: TOOLS.monter, items: [
+      { popis: "Hodinová sazba montážních prací", jednotka: "hod", cena: 650 },
+      { popis: "Montáž skříně (vč. dorovnání a kotvení)", jednotka: "ks", cena: 1800 },
+      { popis: "Montáž šatní skříně vestavné", jednotka: "bm", cena: 1500 },
+      { popis: "Montáž postele (vč. roštu)", jednotka: "ks", cena: 1200 },
+      { popis: "Montáž kuchyňské linky (skříňky + dvířka)", jednotka: "bm", cena: 1900 },
+      { popis: "Výřez do desky pro dřez / varnou desku", jednotka: "ks", cena: 850 },
+      { popis: "Dopojení dřezu / sifonu / odpadu", jednotka: "ks", cena: 650 },
+      { popis: "Montáž poliček a věšáků", jednotka: "ks", cena: 280 },
+      { popis: "Kotvení do sádrokartonu (chemická kotva)", jednotka: "ks", cena: 90 },
+      { popis: "Demontáž starého nábytku + odvoz", jednotka: "ks", cena: 1100 },
+      { popis: "Montáž obrazu / TV držáku na zeď", jednotka: "ks", cena: 480 },
+      { popis: "Doprava a vynesení nábytku do patra", jednotka: "hod", cena: 550 },
   ]},
 ];
