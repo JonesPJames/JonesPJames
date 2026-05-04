@@ -34,6 +34,51 @@ export default function ZakazkaDetail() {
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
   const saveTimer = useRef<any>(null);
+  const [employees, setEmployees] = useState<any[]>([]);
+
+  async function loadEmployees() {
+    try {
+      const r = await api.get("/employees");
+      setEmployees(r.data);
+    } catch {}
+  }
+  useEffect(() => { loadEmployees(); }, []);
+
+  async function toggleAssign(empId: string) {
+    if (!job) return;
+    const cur: string[] = job.assigned_employee_ids || [];
+    const next = cur.includes(empId) ? cur.filter((x) => x !== empId) : [...cur, empId];
+    try {
+      const r = await api.put(`/jobs/${id}/assign`, { employee_ids: next });
+      setJob(r.data);
+    } catch (e: any) {
+      Alert.alert("Chyba", getApiErrorMessage(e));
+    }
+  }
+
+  async function resolveProposal(propId: string, action: "approve" | "reject") {
+    if (action === "approve") {
+      Alert.prompt
+        ? Alert.prompt("Cena za jednotku", "Zadejte cenu (Kč)", async (price) => {
+            try {
+              const r = await api.post(`/jobs/${id}/proposals/${propId}/resolve`, { action, cena: parseFloat(price || "0") || 0 });
+              setJob(r.data);
+            } catch (e: any) { Alert.alert("Chyba", getApiErrorMessage(e)); }
+          }, "plain-text", "0", "numeric")
+        : (async () => {
+            try {
+              const r = await api.post(`/jobs/${id}/proposals/${propId}/resolve`, { action, cena: 0 });
+              setJob(r.data);
+              Alert.alert("Návrh schválen", "Cenu nastavte v tabulce Vícepráce v deníku.");
+            } catch (e: any) { Alert.alert("Chyba", getApiErrorMessage(e)); }
+          })();
+    } else {
+      try {
+        const r = await api.post(`/jobs/${id}/proposals/${propId}/resolve`, { action, cena: 0 });
+        setJob(r.data);
+      } catch (e: any) { Alert.alert("Chyba", getApiErrorMessage(e)); }
+    }
+  }
 
   async function load() {
     try {
@@ -348,6 +393,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   saveBarText: { color: theme.colors.textMuted, fontSize: 12, fontWeight: "600" },
+  empRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  empRowOn: { backgroundColor: theme.colors.surfaceMuted, borderRadius: 8, paddingHorizontal: 8 },
+  proposal: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   summaryCard: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.card,

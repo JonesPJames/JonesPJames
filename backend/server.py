@@ -60,6 +60,17 @@ def create_access_token(user_id: str, email: str) -> str:
         "sub": user_id,
         "email": email,
         "type": "access",
+        "role": "owner",
+        "exp": now_utc() + timedelta(days=ACCESS_TOKEN_DAYS),
+    }
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+def create_employee_token(employee_id: str, owner_user_id: str) -> str:
+    payload = {
+        "sub": employee_id,
+        "owner_user_id": owner_user_id,
+        "type": "access",
+        "role": "employee",
         "exp": now_utc() + timedelta(days=ACCESS_TOKEN_DAYS),
     }
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
@@ -74,6 +85,14 @@ def public_user(u: dict) -> dict:
     }
 
 async def get_current_user(request: Request) -> dict:
+    """Owner-only authentication. Raises 403 if employee token."""
+    actor = await get_current_actor(request)
+    if actor.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Pouze pro vlastníka účtu")
+    return actor["user"]
+
+async def get_current_actor(request: Request) -> dict:
+    """Returns {role, user, employee, owner_user_id}."""
     token = None
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
@@ -81,19 +100,36 @@ async def get_current_user(request: Request) -> dict:
     if not token:
         token = request.cookies.get("access_token")
     if not token:
-        token = request.query_params.get("token")  # for PDF download via Linking
+        token = request.query_params.get("token")
     if not token:
         raise HTTPException(status_code=401, detail="Nepřihlášený uživatel")
     try:
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
-        user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
-        if not user:
-            raise HTTPException(status_code=401, detail="Uživatel neexistuje")
-        return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Vypršela platnost tokenu")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Neplatný token")
+    role = payload.get("role", "owner")
+    if role == "employee":
+        emp = await db.employees.find_one({"id": payload["sub"]}, {"_id": 0})
+        if not emp or not emp.get("active", True):
+            raise HTTPException(status_code=401, detail="Zaměstnanec neexistuje")
+        return {
+            "role": "employee",
+            "employee": emp,
+            "owner_user_id": payload.get("owner_user_id"),
+            "user": None,
+        }
+    user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="Uživatel neexistuje")
+    return {"role": "owner", "user": user, "employee": None, "owner_user_id": user["id"]}
+
+async def require_employee(request: Request) -> dict:
+    actor = await get_current_actor(request)
+    if actor.get("role") != "employee":
+        raise HTTPException(status_code=403, detail="Pouze pro zaměstnance")
+    return actor
 
 # ---------- Models ----------
 class RegisterIn(BaseModel):
@@ -274,7 +310,7 @@ async def create_job(payload: JobCreate, user: dict = Depends(get_current_user))
         "diary_entries": [],
         "status": "rozpracovano",
         "photo_url": "",
-        "payment_note": "Splatnost 14 dní od vystavení faktury.",
+        "payment_note": "",
         "finalized": False,
         "created_at": now_utc(),
         "updated_at": now_utc(),
@@ -593,8 +629,9 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     elems.append(rec)
 
     elems.append(Spacer(1, 12))
-    elems.append(Paragraph(job.get("payment_note") or "Splatnost 14 dní od vystavení faktury.", small))
-    elems.append(Spacer(1, 4))
+    if job.get("payment_note"):
+        elems.append(Paragraph(job["payment_note"], small))
+        elems.append(Spacer(1, 4))
     elems.append(Paragraph("Nabídka platí 30 dní od data vystavení.", small))
 
     doc.build(elems)
@@ -707,7 +744,8 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     elems.append(Spacer(1, 6))
     elems.append(rec)
     elems.append(Spacer(1, 8))
-    elems.append(Paragraph(job.get("payment_note") or "Splatnost 14 dní od vystavení faktury.", small))
+    if job.get("payment_note"):
+        elems.append(Paragraph(job["payment_note"], small))
 
     doc.build(elems)
     return buf.getvalue()
@@ -844,6 +882,266 @@ async def import_remeslnik(payload: ImportPayload, user: dict = Depends(get_curr
         "material": material_lines,
     }
 
+# ---------- Employees & PIN auth ----------
+import random as _random
+
+def _gen_pin(existing: set[str]) -> str:
+    for _ in range(200):
+        p = f"{_random.randint(0, 9999):04d}"
+        if p not in existing:
+            return p
+    raise HTTPException(500, "Nepodařilo se vygenerovat PIN")
+
+class EmployeeCreate(BaseModel):
+    name: str
+    phone: str = ""
+
+class EmployeeUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    active: Optional[bool] = None
+
+class PinLoginIn(BaseModel):
+    pin: str
+
+def public_employee(e: dict) -> dict:
+    return {
+        "id": e["id"],
+        "name": e.get("name", ""),
+        "phone": e.get("phone", ""),
+        "pin": e.get("pin", ""),
+        "active": e.get("active", True),
+        "owner_user_id": e.get("owner_user_id"),
+    }
+
+@api.get("/employees")
+async def list_employees(user: dict = Depends(get_current_user)):
+    cursor = db.employees.find({"owner_user_id": user["id"]}, {"_id": 0}).sort("id", 1)
+    return [public_employee(e) async for e in cursor]
+
+@api.post("/employees")
+async def create_employee(payload: EmployeeCreate, user: dict = Depends(get_current_user)):
+    # human-readable id ZAM-NNN per owner
+    cursor = db.employees.find({"owner_user_id": user["id"]}, {"_id": 0, "id": 1, "pin": 1})
+    items = [e async for e in cursor]
+    used_pins = {e["pin"] for e in items}
+    n = 1
+    nums = []
+    for it in items:
+        try:
+            nums.append(int(it["id"].split("-")[1]))
+        except Exception:
+            pass
+    if nums:
+        n = max(nums) + 1
+    emp_id = f"ZAM-{n:03d}"
+    pin = _gen_pin(used_pins)
+    doc = {
+        "id": emp_id,
+        "owner_user_id": user["id"],
+        "name": payload.name,
+        "phone": payload.phone,
+        "pin": pin,
+        "active": True,
+        "created_at": now_utc(),
+    }
+    await db.employees.insert_one(doc.copy())
+    return public_employee(doc)
+
+@api.put("/employees/{emp_id}")
+async def update_employee(emp_id: str, payload: EmployeeUpdate, user: dict = Depends(get_current_user)):
+    existing = await db.employees.find_one({"id": emp_id, "owner_user_id": user["id"]})
+    if not existing:
+        raise HTTPException(404, "Zaměstnanec nenalezen")
+    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    if update:
+        await db.employees.update_one({"id": emp_id}, {"$set": update})
+    fresh = await db.employees.find_one({"id": emp_id}, {"_id": 0})
+    return public_employee(fresh)
+
+@api.delete("/employees/{emp_id}")
+async def delete_employee(emp_id: str, user: dict = Depends(get_current_user)):
+    res = await db.employees.delete_one({"id": emp_id, "owner_user_id": user["id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "Zaměstnanec nenalezen")
+    # remove from any job assignments
+    await db.jobs.update_many(
+        {"user_id": user["id"]},
+        {"$pull": {"assigned_employee_ids": emp_id}},
+    )
+    return {"ok": True}
+
+@api.post("/auth/login-pin")
+async def login_pin(payload: PinLoginIn):
+    pin = (payload.pin or "").strip()
+    if len(pin) != 4 or not pin.isdigit():
+        raise HTTPException(400, "PIN musí mít 4 číslice")
+    emp = await db.employees.find_one({"pin": pin, "active": True}, {"_id": 0})
+    if not emp:
+        raise HTTPException(401, "Neplatný PIN")
+    token = create_employee_token(emp["id"], emp["owner_user_id"])
+    return {
+        "employee": public_employee(emp),
+        "token": token,
+    }
+
+@api.get("/auth/me-employee")
+async def me_employee(actor: dict = Depends(require_employee)):
+    return public_employee(actor["employee"])
+
+# ---------- Job assignment ----------
+class AssignIn(BaseModel):
+    employee_ids: List[str]
+
+@api.put("/jobs/{job_id}/assign")
+async def assign_employees(job_id: str, payload: AssignIn, user: dict = Depends(get_current_user)):
+    job = await db.jobs.find_one({"id": job_id, "user_id": user["id"]}, {"_id": 0})
+    if not job:
+        raise HTTPException(404, "Zakázka nenalezena")
+    if job.get("status") != "schvaleno":
+        raise HTTPException(400, "Zaměstnance lze přiřadit jen ke schválené zakázce")
+    valid_ids = []
+    for eid in payload.employee_ids:
+        emp = await db.employees.find_one({"id": eid, "owner_user_id": user["id"]})
+        if emp:
+            valid_ids.append(eid)
+    await db.jobs.update_one({"id": job_id}, {"$set": {"assigned_employee_ids": valid_ids, "updated_at": now_utc()}})
+    fresh = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    return serialize_job(fresh)
+
+# ---------- Employee read-only views ----------
+def _strip_prices(rows):
+    out = []
+    for r in rows or []:
+        out.append({"id": r.get("id"), "popis": r.get("popis", ""), "mnozstvi": r.get("mnozstvi", 0), "jednotka": r.get("jednotka", "")})
+    return out
+
+def _employee_job_view(job: dict) -> dict:
+    """Strip all prices and totals for employee view."""
+    return {
+        "id": job["id"],
+        "job_number": job.get("job_number"),
+        "client_name": job.get("client_name", ""),
+        "address": job.get("address", ""),
+        "title": job.get("title", ""),
+        "status": job.get("status"),
+        "effective_status": job.get("effective_status"),
+        "material": _strip_prices(job.get("material", [])),
+        "prace": _strip_prices(job.get("prace", [])),  # description only, no prices
+        "diary_entries": job.get("diary_entries", []),
+        "vicepracovne_proposals": job.get("vicepracovne_proposals", []),
+        "assigned_employee_ids": job.get("assigned_employee_ids", []),
+        "created_at": job.get("created_at"),
+    }
+
+@api.get("/employee/jobs")
+async def employee_jobs(actor: dict = Depends(require_employee)):
+    emp = actor["employee"]
+    cursor = db.jobs.find(
+        {"user_id": emp["owner_user_id"], "assigned_employee_ids": emp["id"]},
+        {"_id": 0},
+    ).sort("created_at", -1)
+    items = []
+    async for j in cursor:
+        items.append(_employee_job_view(serialize_job(j)))
+    return items
+
+@api.get("/employee/jobs/{job_id}")
+async def employee_job_detail(job_id: str, actor: dict = Depends(require_employee)):
+    emp = actor["employee"]
+    job = await db.jobs.find_one(
+        {"id": job_id, "user_id": emp["owner_user_id"], "assigned_employee_ids": emp["id"]},
+        {"_id": 0},
+    )
+    if not job:
+        raise HTTPException(404, "Zakázka nenalezena nebo nepřiřazena")
+    return _employee_job_view(serialize_job(job))
+
+class EmployeeDiaryIn(BaseModel):
+    date: str
+    work: str
+    weather: str = ""
+    workers: str = ""
+    notes: str = ""
+    photo_base64: Optional[str] = None
+
+@api.post("/employee/jobs/{job_id}/diary")
+async def employee_add_diary(job_id: str, payload: EmployeeDiaryIn, actor: dict = Depends(require_employee)):
+    emp = actor["employee"]
+    job = await db.jobs.find_one(
+        {"id": job_id, "user_id": emp["owner_user_id"], "assigned_employee_ids": emp["id"]}
+    )
+    if not job:
+        raise HTTPException(404, "Zakázka nenalezena nebo nepřiřazena")
+    entry = payload.model_dump()
+    entry["id"] = str(uuid.uuid4())
+    entry["created_by"] = emp["id"]
+    entry["author_name"] = emp.get("name", "")
+    entries = (job.get("diary_entries") or []) + [entry]
+    await db.jobs.update_one({"id": job_id}, {"$set": {"diary_entries": entries, "updated_at": now_utc()}})
+    return {"ok": True, "entry": entry}
+
+class ProposalIn(BaseModel):
+    popis: str
+    mnozstvi: float = 1
+    jednotka: str = "ks"
+    note: str = ""
+
+@api.post("/employee/jobs/{job_id}/propose-vicepracovne")
+async def employee_propose(job_id: str, payload: ProposalIn, actor: dict = Depends(require_employee)):
+    emp = actor["employee"]
+    job = await db.jobs.find_one(
+        {"id": job_id, "user_id": emp["owner_user_id"], "assigned_employee_ids": emp["id"]}
+    )
+    if not job:
+        raise HTTPException(404, "Zakázka nenalezena nebo nepřiřazena")
+    proposal = {
+        "id": str(uuid.uuid4()),
+        "proposed_by": emp["id"],
+        "proposed_by_name": emp.get("name", ""),
+        "popis": payload.popis,
+        "mnozstvi": payload.mnozstvi,
+        "jednotka": payload.jednotka,
+        "note": payload.note,
+        "status": "pending",
+        "created_at": now_utc().isoformat(),
+    }
+    proposals = (job.get("vicepracovne_proposals") or []) + [proposal]
+    await db.jobs.update_one({"id": job_id}, {"$set": {"vicepracovne_proposals": proposals, "updated_at": now_utc()}})
+    return {"ok": True, "proposal": proposal}
+
+class ResolveProposalIn(BaseModel):
+    action: Literal["approve", "reject"]
+    cena: Optional[float] = 0  # owner sets price on approval
+
+@api.post("/jobs/{job_id}/proposals/{proposal_id}/resolve")
+async def resolve_proposal(job_id: str, proposal_id: str, payload: ResolveProposalIn, user: dict = Depends(get_current_user)):
+    job = await db.jobs.find_one({"id": job_id, "user_id": user["id"]}, {"_id": 0})
+    if not job:
+        raise HTTPException(404, "Zakázka nenalezena")
+    proposals = job.get("vicepracovne_proposals") or []
+    target = next((p for p in proposals if p.get("id") == proposal_id), None)
+    if not target:
+        raise HTTPException(404, "Návrh nenalezen")
+    if target.get("status") != "pending":
+        raise HTTPException(400, "Návrh už byl vyřízen")
+    target["status"] = "approved" if payload.action == "approve" else "rejected"
+    target["resolved_at"] = now_utc().isoformat()
+    update = {"vicepracovne_proposals": proposals, "updated_at": now_utc()}
+    if payload.action == "approve":
+        # add to vicepracovne table
+        new_row = {
+            "id": str(uuid.uuid4()),
+            "popis": target["popis"],
+            "mnozstvi": target.get("mnozstvi", 1),
+            "jednotka": target.get("jednotka", "ks"),
+            "cena": float(payload.cena or 0),
+        }
+        update["vicepracovne"] = (job.get("vicepracovne") or []) + [new_row]
+    await db.jobs.update_one({"id": job_id}, {"$set": update})
+    fresh = await db.jobs.find_one({"id": job_id}, {"_id": 0})
+    return serialize_job(fresh)
+
 # ---------- Health ----------
 @api.get("/")
 async def root():
@@ -866,6 +1164,8 @@ async def startup():
     await db.jobs.create_index([("user_id", 1), ("created_at", -1)])
     await db.jobs.create_index("id", unique=True)
     await db.quote_variants.create_index("id", unique=True)
+    await db.employees.create_index([("owner_user_id", 1), ("id", 1)], unique=True)
+    await db.employees.create_index("pin", unique=True, sparse=True)
     # seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
     admin_pass = os.environ.get("ADMIN_PASSWORD", "admin123")
@@ -883,6 +1183,15 @@ async def startup():
         logger.info("Seeded admin user %s", admin_email)
     elif not verify_password(admin_pass, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pass)}})
+
+    # One-time migration: clear legacy default payment_note
+    try:
+        await db.jobs.update_many(
+            {"payment_note": "Splatnost 14 dní od vystavení faktury."},
+            {"$set": {"payment_note": ""}},
+        )
+    except Exception:
+        pass
 
 @app.on_event("shutdown")
 async def shutdown():

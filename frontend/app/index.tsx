@@ -5,14 +5,15 @@ import { useAuth } from "../src/auth";
 import { theme } from "../src/theme";
 
 export default function Index() {
-  const { user, loading } = useAuth();
+  const { actor, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return;
-    if (user) router.replace("/home");
-    else router.replace("/login");
-  }, [loading, user]);
+    if (!actor) router.replace("/login");
+    else if (actor.role === "owner") router.replace("/home");
+    else router.replace("/employee");
+  }, [loading, actor]);
 
   return (
     <View style={styles.c} testID="splash-loader">

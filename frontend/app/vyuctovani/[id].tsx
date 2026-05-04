@@ -138,8 +138,8 @@ export default function Vyuctovani() {
             <View style={{ height: 12 }} />
             <Field
               label="📷 Odkaz na fotodokumentaci (Google Drive / album)"
-              value={job.photo_url || ""}
-              onChangeText={(v) => !isFinal && patch({ photo_url: v })}
+              value={photoUrl}
+              onChangeText={onChangePhoto}
               editable={!isFinal}
               autoCapitalize="none"
               placeholder="https://..."
@@ -160,10 +160,11 @@ export default function Vyuctovani() {
           <View style={styles.card}>
             <Field
               label="Poznámka / platební podmínky"
-              value={job.payment_note || ""}
-              onChangeText={(v) => !isFinal && patch({ payment_note: v })}
+              value={paymentNote}
+              onChangeText={onChangeNote}
               editable={!isFinal}
               multiline
+              placeholder="Např. Splatnost 14 dní od vystavení faktury, číslo účtu, IBAN…"
               testID="payment-note"
             />
           </View>

@@ -25,6 +25,7 @@ const TILES: { key: string; title: string; subtitle: string; icon: any; href: st
   { key: "kalkulacka", title: "Kalkulačka prací", subtitle: "Ceny dle profese", icon: "calculator-outline", href: "/kalkulacka" },
   { key: "generator", title: "Generátor nabídek", subtitle: "AI vytvoří 3 varianty", icon: "sparkles-outline", href: "/generator" },
   { key: "import", title: "Import z Řemeslník AI", subtitle: "Načíst JSON podklady", icon: "cloud-download-outline", href: "/import" },
+  { key: "zamestnanci", title: "Zaměstnanci", subtitle: "Správa týmu a PIN přístupů", icon: "people-outline", href: "/zamestnanci" },
   { key: "profil", title: "Můj profil", subtitle: "Jméno, firma, telefon", icon: "person-outline", href: "/profil" },
 ];
 
