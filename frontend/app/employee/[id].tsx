@@ -15,6 +15,7 @@ import {
 import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppFooter } from "../../src/components/AppFooter";
 import { AppHeader } from "../../src/components/AppHeader";
 import { Field } from "../../src/components/Field";
 import { PrimaryButton } from "../../src/components/PrimaryButton";
@@ -450,6 +451,7 @@ export default function EmployeeJobDetail() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      <AppFooter />
     </SafeAreaView>
   );
 }

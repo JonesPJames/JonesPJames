@@ -10,6 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppFooter } from "../src/components/AppFooter";
 import { AppHeader } from "../src/components/AppHeader";
 import { PrimaryButton } from "../src/components/PrimaryButton";
 import { LineItemEditor, newRow, LineItem } from "../src/components/LineItemEditor";
@@ -74,6 +75,7 @@ export default function Kalkulacka() {
             ))}
           </View>
         </ScrollView>
+        <AppFooter />
       </SafeAreaView>
     );
   }
@@ -97,6 +99,7 @@ export default function Kalkulacka() {
         <PrimaryButton title="Vytvořit nabídku z kalkulace" onPress={exportToNova} testID="export-to-nova" />
         <View style={{ height: 30 }} />
       </ScrollView>
+      <AppFooter />
     </SafeAreaView>
   );
 }

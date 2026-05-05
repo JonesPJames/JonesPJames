@@ -17,6 +17,7 @@ export type Employee = {
   pin: string;
   active: boolean;
   owner_user_id: string;
+  trade?: string;
 };
 
 export type Actor =

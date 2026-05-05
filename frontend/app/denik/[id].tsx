@@ -14,6 +14,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppFooter } from "../../src/components/AppFooter";
 import * as ImagePicker from "expo-image-picker";
 import { AppHeader } from "../../src/components/AppHeader";
 import { Field } from "../../src/components/Field";
@@ -186,6 +187,7 @@ export default function Denik() {
           <View style={{ height: 30 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+      <AppFooter />
     </SafeAreaView>
   );
 }

@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppFooter } from "../src/components/AppFooter";
 import { useAuth } from "../src/auth";
 import { AppHeader } from "../src/components/AppHeader";
 import { Field } from "../src/components/Field";
@@ -58,6 +59,7 @@ export default function Profil() {
           <PrimaryButton variant="ghost" title="Odhlásit se" onPress={onLogout} testID="p-logout" />
         </ScrollView>
       </KeyboardAvoidingView>
+      <AppFooter />
     </SafeAreaView>
   );
 }

@@ -12,6 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppFooter } from "../src/components/AppFooter";
 import { AppHeader } from "../src/components/AppHeader";
 import { StatusBadge } from "../src/components/StatusBadge";
 import { theme, fmtCZK, fmtDateCZ } from "../src/theme";
@@ -138,6 +139,7 @@ export default function Adresar() {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+      <AppFooter />
     </SafeAreaView>
   );
 }

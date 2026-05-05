@@ -12,6 +12,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppFooter } from "../src/components/AppFooter";
 import { useAuth } from "../src/auth";
 import { theme } from "../src/theme";
 import { Field } from "../src/components/Field";
@@ -137,6 +138,7 @@ export default function Login() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <AppFooter />
     </SafeAreaView>
   );
 }

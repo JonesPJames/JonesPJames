@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppFooter } from "../src/components/AppFooter";
 import { AppHeader } from "../src/components/AppHeader";
 import { PrimaryButton } from "../src/components/PrimaryButton";
 import { theme } from "../src/theme";
@@ -87,6 +88,7 @@ export default function ImportScreen() {
           <PrimaryButton title="Importovat a vytvořit zakázku" onPress={onImport} loading={busy} testID="import-btn" />
         </ScrollView>
       </KeyboardAvoidingView>
+      <AppFooter />
     </SafeAreaView>
   );
 }

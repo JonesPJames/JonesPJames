@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../src/auth";
 import { theme } from "../src/theme";
 import { AppHeader } from "../src/components/AppHeader";
+import { AppFooter } from "../src/components/AppFooter";
 import { HelpIcon } from "../src/components/HelpIcon";
 import {
   OnboardingOverlay,
@@ -130,6 +131,7 @@ export default function Home() {
         visible={onboardOpen}
         onClose={() => setOnboardOpen(false)}
       />
+      <AppFooter />
     </SafeAreaView>
   );
 }

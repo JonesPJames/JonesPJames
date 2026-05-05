@@ -16,6 +16,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppHeader } from "../../src/components/AppHeader";
+import { AppFooter } from "../../src/components/AppFooter";
 import { StatusBadge } from "../../src/components/StatusBadge";
 import { PrimaryButton } from "../../src/components/PrimaryButton";
 import { Field } from "../../src/components/Field";
@@ -319,6 +320,122 @@ export default function ZakazkaDetail() {
             })}
           </View>
 
+          {/* Přiřazení zaměstnanců — viditelné jen u SCHVÁLENÉ zakázky */}
+          {job.status === "schvaleno" || job.status === "dokonceno" ? (
+            <>
+              <Text style={styles.sectionTitle}>Přiřazení zaměstnanci</Text>
+              <View style={styles.section} testID="assign-section">
+                {employees.length === 0 ? (
+                  <Text style={styles.empty}>Nejprve přidejte zaměstnance v sekci „Zaměstnanci“.</Text>
+                ) : (
+                  employees.map((e) => {
+                    const on = (job.assigned_employee_ids || []).includes(e.id);
+                    const myCl = (job.tool_checklists || {})[e.id];
+                    return (
+                      <View key={e.id}>
+                        <TouchableOpacity
+                          style={[styles.empRow, on && styles.empRowOn]}
+                          onPress={() => toggleAssign(e.id)}
+                          testID={`assign-${e.id}`}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[styles.empCheckbox, on && styles.empCheckboxOn]}>
+                            {on ? <Ionicons name="checkmark" size={18} color="#fff" /> : null}
+                          </View>
+                          <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text style={styles.empName}>{e.name}</Text>
+                            <Text style={styles.empMeta}>{e.id}{e.phone ? ` • ${e.phone}` : ""}{e.trade ? ` • ${e.trade}` : ""}</Text>
+                          </View>
+                          {myCl?.confirmed ? (
+                            <View style={styles.lockTag}>
+                              <Ionicons name="lock-closed" size={11} color="#fff" />
+                              <Text style={styles.lockTagText}>Nářadí převzato</Text>
+                            </View>
+                          ) : null}
+                        </TouchableOpacity>
+
+                        {on && myCl ? (
+                          <View style={styles.toolSummary}>
+                            <Text style={styles.toolSummaryTitle}>Soupis nářadí ({(myCl.basic_tools || []).length + (myCl.extra_tools || []).length} ks)</Text>
+                            <Text style={styles.toolSummaryCount}>
+                              {myCl.confirmed
+                                ? `Potvrzeno ${new Date(myCl.confirmed_at).toLocaleString("cs-CZ")}`
+                                : "Neuzamčeno"}
+                            </Text>
+                            {(myCl.basic_tools || []).map((t: string, i: number) => (
+                              <Text key={`b-${i}`} style={styles.toolLine}>• {t}</Text>
+                            ))}
+                            {(myCl.extra_tools || []).map((t: string, i: number) => (
+                              <Text key={`e-${i}`} style={[styles.toolLine, { fontWeight: "700" }]}>+ {t}</Text>
+                            ))}
+                          </View>
+                        ) : null}
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            </>
+          ) : null}
+
+          {/* Návrhy víceprací — k vyřízení */}
+          {(job.vicepracovne_proposals || []).length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Návrhy víceprací od zaměstnanců</Text>
+              <View style={styles.section} testID="proposals-section">
+                {(job.vicepracovne_proposals || []).map((p: any) => {
+                  const isPending = p.status === "pending";
+                  return (
+                    <View key={p.id} style={styles.proposal}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <View style={{ flex: 1, paddingRight: 10 }}>
+                          <Text style={styles.proposalDesc}>{p.popis}</Text>
+                          <Text style={styles.proposalMeta}>
+                            {p.proposed_by_name || p.proposed_by} • {p.mnozstvi} {p.jednotka}
+                          </Text>
+                          {p.note ? <Text style={styles.proposalNote}>„{p.note}“</Text> : null}
+                        </View>
+                        <View style={[
+                          styles.statusTag,
+                          p.status === "approved" ? styles.tagApproved :
+                          p.status === "rejected" ? styles.tagRejected : styles.tagPending,
+                        ]}>
+                          <Text style={[
+                            styles.statusTagText,
+                            p.status === "approved" ? { color: "#14532d" } :
+                            p.status === "rejected" ? { color: "#7f1d1d" } : { color: "#78350f" },
+                          ]}>
+                            {p.status === "approved" ? "Schváleno" : p.status === "rejected" ? "Zamítnuto" : "Čeká"}
+                          </Text>
+                        </View>
+                      </View>
+                      {isPending ? (
+                        <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                          <TouchableOpacity
+                            style={[styles.propBtn, { backgroundColor: theme.colors.primary }]}
+                            onPress={() => resolveProposal(p.id, "approve")}
+                            testID={`approve-${p.id}`}
+                          >
+                            <Ionicons name="checkmark" size={16} color="#fff" />
+                            <Text style={styles.propBtnText}>Schválit + cena</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.propBtn, { backgroundColor: theme.colors.surfaceMuted, borderWidth: 1, borderColor: theme.colors.border }]}
+                            onPress={() => resolveProposal(p.id, "reject")}
+                            testID={`reject-${p.id}`}
+                          >
+                            <Ionicons name="close" size={16} color={theme.colors.danger} />
+                            <Text style={[styles.propBtnText, { color: theme.colors.danger }]}>Zamítnout</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
           {/* Práce */}
           <Text style={styles.sectionTitle}>Práce</Text>
           <View style={styles.tableWrap}>
@@ -371,6 +488,7 @@ export default function ZakazkaDetail() {
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+      <AppFooter />
     </SafeAreaView>
   );
 }
@@ -393,22 +511,51 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   saveBarText: { color: theme.colors.textMuted, fontSize: 12, fontWeight: "600" },
-  empRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  empty: { color: theme.colors.textMuted, fontStyle: "italic", padding: 8 },
+  empRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   empRowOn: { backgroundColor: theme.colors.surfaceMuted, borderRadius: 8, paddingHorizontal: 8 },
-  proposal: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
-  toolSummary: {
-    marginLeft: 32,
-    marginTop: 4,
-    marginBottom: 12,
-    padding: 12,
+  empCheckbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
     backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: 10,
-    borderLeftWidth: 3,
-    borderLeftColor: theme.colors.text,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  toolSummaryTitle: { fontSize: 12, fontWeight: "700", color: theme.colors.text },
-  toolSummaryCount: { fontSize: 12, fontWeight: "800", color: theme.colors.primary, marginBottom: 6 },
-  toolLine: { fontSize: 13, color: theme.colors.text, paddingVertical: 2 },
+  empCheckboxOn: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  empName: { color: theme.colors.text, fontSize: 15, fontWeight: "700" },
+  empMeta: { color: theme.colors.textMuted, fontSize: 12, marginTop: 2 },
+  lockTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  lockTagText: { color: "#fff", fontSize: 10, fontWeight: "800" },
+  proposal: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  proposalDesc: { color: theme.colors.text, fontSize: 15, fontWeight: "700" },
+  proposalMeta: { color: theme.colors.textMuted, fontSize: 12, marginTop: 2 },
+  proposalNote: { color: theme.colors.text, fontStyle: "italic", marginTop: 4, fontSize: 13 },
+  propBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  propBtnText: { color: "#fff", fontWeight: "800", fontSize: 13 },
+  statusTag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  statusTagText: { fontSize: 11, fontWeight: "800" },
+  tagPending: { backgroundColor: "#fef3c7" },
+  tagApproved: { backgroundColor: "#dcfce7" },
+  tagRejected: { backgroundColor: "#fee2e2" },
   toolSummary: {
     marginLeft: 32,
     marginTop: 4,

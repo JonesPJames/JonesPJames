@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppFooter } from "../src/components/AppFooter";
 import { useAuth } from "../src/auth";
 import { theme, fmtDateCZ } from "../src/theme";
 import { api, getApiErrorMessage } from "../src/api";
@@ -94,6 +95,7 @@ export default function EmployeeHome() {
           ))
         )}
       </ScrollView>
+      <AppFooter />
     </SafeAreaView>
   );
 }

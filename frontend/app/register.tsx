@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppFooter } from "../src/components/AppFooter";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth";
 import { theme } from "../src/theme";
@@ -94,6 +95,7 @@ export default function Register() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <AppFooter />
     </SafeAreaView>
   );
 }

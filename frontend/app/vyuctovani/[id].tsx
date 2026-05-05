@@ -14,6 +14,7 @@ import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppHeader } from "../../src/components/AppHeader";
+import { AppFooter } from "../../src/components/AppFooter";
 import { Field } from "../../src/components/Field";
 import { PrimaryButton } from "../../src/components/PrimaryButton";
 import { theme, fmtCZK, fmtDateCZ } from "../../src/theme";
@@ -24,11 +25,16 @@ export default function Vyuctovani() {
   const [job, setJob] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const saveTimer = React.useRef<any>(null);
 
   async function load() {
     try {
       const r = await api.get(`/jobs/${id}`);
       setJob(r.data);
+      setPhotoUrl(r.data.photo_url || "");
+      setPaymentNote(r.data.payment_note || "");
     } catch (e: any) {
       Alert.alert("Chyba", getApiErrorMessage(e));
     } finally {
@@ -43,6 +49,26 @@ export default function Vyuctovani() {
   async function patch(payload: any) {
     const r = await api.put(`/jobs/${id}`, payload);
     setJob(r.data);
+  }
+
+  // Debounced auto-save for editable note + photo url
+  function scheduleSave(next: { photo_url?: string; payment_note?: string }) {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await patch(next);
+      } catch (e) {
+        // silent autosave
+      }
+    }, 500);
+  }
+  function onChangePhoto(t: string) {
+    setPhotoUrl(t);
+    scheduleSave({ photo_url: t });
+  }
+  function onChangeNote(t: string) {
+    setPaymentNote(t);
+    scheduleSave({ payment_note: t });
   }
 
   async function finalize() {
@@ -183,6 +209,7 @@ export default function Vyuctovani() {
           <View style={{ height: 30 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+      <AppFooter />
     </SafeAreaView>
   );
 }

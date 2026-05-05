@@ -515,7 +515,8 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
         "Varianta 2 = 'Zlatá střední cesta' — DOPORUČENÁ. Vyšší cena ospravedlněná: kvalitnější materiály, "
         "důkladnější příprava povrchů, prodloužená záruka (36 měsíců), drobné nadstandardní detaily. "
         "Varianta 3 = 'Premium' — Prémiové značkové materiály, rozšířený rozsah včetně dodatečných úprav, "
-        "dlouhá záruka (60 měsíců), prioritní termín a servis, finální úklid. "
+        "MAXIMÁLNÍ záruka 48 měsíců, prioritní termín a servis, finální úklid. "
+        "DŮLEŽITÉ: Maximální záruka u jakékoli varianty je 48 měsíců — nikdy nenavrhuj delší."
         "POZOR: Ceny NEZADÁVEJ — vrať pouze obsah. Jazyk: česky. "
         "Vrať POUZE validní JSON pole."
     )
@@ -557,7 +558,7 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
             v["cena_kc"] = float(prices[i])
             v["nazev"] = v.get("nazev") or defaults_nazev[i]
             v["rozsah"] = v.get("rozsah", "")
-            v["zaruka"] = v.get("zaruka") or ["24 měsíců", "36 měsíců", "60 měsíců"][i]
+            v["zaruka"] = v.get("zaruka") or ["24 měsíců", "36 měsíců", "48 měsíců"][i]
             v["termin"] = v.get("termin") or ["4-6 týdnů", "3-5 týdnů", "2-4 týdny (priorita)"][i]
             v["included"] = v.get("included") or []
             v["excluded"] = v.get("excluded") or []
@@ -575,6 +576,22 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
             variants[2]["cena_kc"] = variants[1]["cena_kc"] + 100
         if not (variants[2]["cena_kc"] <= variants[1]["cena_kc"] * 1.20):
             variants[2]["cena_kc"] = round_clean(variants[1]["cena_kc"] * 1.20)
+
+        # Cap warranty at 48 months for ALL variants
+        import re as _re
+        warranty_defaults = ["24 měsíců", "36 měsíců", "48 měsíců"]
+        for i, v in enumerate(variants):
+            z = str(v.get("zaruka", "") or "")
+            m = _re.search(r"(\d{1,3})", z)
+            if m:
+                months = int(m.group(1))
+                # If unit is years, convert
+                if "rok" in z.lower() or "let" in z.lower():
+                    months = months * 12
+                if months > 48:
+                    v["zaruka"] = warranty_defaults[i]
+            else:
+                v["zaruka"] = warranty_defaults[i]
 
         bundle_id = str(uuid.uuid4())
         await db.quote_variants.insert_one({
@@ -717,6 +734,8 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         elems.append(Paragraph(job["payment_note"], small))
         elems.append(Spacer(1, 4))
     elems.append(Paragraph("Nabídka platí 30 dní od data vystavení.", small))
+    elems.append(Spacer(1, 14))
+    elems.append(Paragraph("<font color='#9ca3af'>Vytvořil © James P. Jones 2026</font>", small))
 
     doc.build(elems)
     return buf.getvalue()
@@ -830,6 +849,8 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     elems.append(Spacer(1, 8))
     if job.get("payment_note"):
         elems.append(Paragraph(job["payment_note"], small))
+    elems.append(Spacer(1, 14))
+    elems.append(Paragraph("<font color='#9ca3af'>Vytvořil © James P. Jones 2026</font>", small))
 
     doc.build(elems)
     return buf.getvalue()
@@ -888,6 +909,8 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
 
     elems.append(Spacer(1, 6))
     elems.append(Paragraph(f"Vystavil: {user.get('company') or user.get('name','')} | {user.get('phone','')} | {user.get('email','')}", small))
+    elems.append(Spacer(1, 10))
+    elems.append(Paragraph("<font color='#9ca3af'>Vytvořil © James P. Jones 2026</font>", small))
     doc.build(elems)
     return buf.getvalue()
 
