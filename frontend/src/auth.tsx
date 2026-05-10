@@ -8,6 +8,7 @@ export type User = {
   name: string;
   company: string;
   phone: string;
+  company_code: string;
 };
 
 export type Employee = {
@@ -18,6 +19,7 @@ export type Employee = {
   active: boolean;
   owner_user_id: string;
   trade?: string;
+  company_code?: string;
 };
 
 export type Actor =
@@ -36,7 +38,7 @@ type AuthCtx = {
   loginOwner: (email: string, password: string) => Promise<void>;
   /** Alias for loginOwner — used by older login.tsx. */
   login: (email: string, password: string) => Promise<void>;
-  loginEmployee: (pin: string) => Promise<void>;
+  loginEmployee: (companyCode: string, pin: string) => Promise<void>;
   register: (email: string, password: string, name: string, company: string, phone: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -78,8 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActor({ role: "owner", user: r.data.user });
   }
 
-  async function loginEmployee(pin: string) {
-    const r = await api.post("/auth/login-pin", { pin });
+  async function loginEmployee(companyCode: string, pin: string) {
+    const r = await api.post("/auth/login-pin", { company_code: companyCode, pin });
     await setToken(r.data.token);
     await AsyncStorage.setItem(ROLE_KEY, "employee");
     setActor({ role: "employee", employee: r.data.employee });

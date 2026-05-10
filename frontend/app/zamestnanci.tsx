@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppFooter } from "../src/components/AppFooter";
@@ -18,11 +19,29 @@ import { Field } from "../src/components/Field";
 import { PrimaryButton } from "../src/components/PrimaryButton";
 import { theme } from "../src/theme";
 import { api, getApiErrorMessage } from "../src/api";
+import { useAuth } from "../src/auth";
 import { TRADES } from "../src/trades";
 
-type Employee = { id: string; name: string; phone: string; pin: string; active: boolean; trade?: string };
+type Employee = { id: string; name: string; phone: string; pin: string; active: boolean; trade?: string; company_code?: string };
+
+/** Cross-platform confirm. Native iOS/Android uses Alert.alert (3-button modal),
+ *  web uses window.confirm because RN-Web's Alert.alert is unreliable for callbacks. */
+function confirmAsync(title: string, message: string): Promise<boolean> {
+  if (Platform.OS === "web") {
+    // eslint-disable-next-line no-alert
+    return Promise.resolve(typeof window !== "undefined" && window.confirm(`${title}\n\n${message}`));
+  }
+  return new Promise((resolve) => {
+    Alert.alert(title, message, [
+      { text: "Zrušit", style: "cancel", onPress: () => resolve(false) },
+      { text: "Smazat", style: "destructive", onPress: () => resolve(true) },
+    ], { cancelable: true, onDismiss: () => resolve(false) });
+  });
+}
 
 export default function ZamestnanciScreen() {
+  const { actor } = useAuth();
+  const ownerCode = actor?.role === "owner" ? actor.user.company_code || "" : "";
   const [items, setItems] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -30,6 +49,7 @@ export default function ZamestnanciScreen() {
   const [phone, setPhone] = useState("");
   const [trade, setTrade] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   async function load() {
     try {
@@ -64,29 +84,61 @@ export default function ZamestnanciScreen() {
   }
 
   async function remove(emp: Employee) {
-    Alert.alert("Smazat zaměstnance?", `${emp.name} (${emp.id})`, [
-      { text: "Zrušit", style: "cancel" },
-      {
-        text: "Smazat",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await api.delete(`/employees/${emp.id}`);
-            await load();
-          } catch (e: any) {
-            Alert.alert("Chyba", getApiErrorMessage(e));
-          }
-        },
-      },
-    ]);
+    const ok = await confirmAsync(
+      "Smazat zaměstnance?",
+      `${emp.name} (${emp.id}) bude trvale odstraněn ze seznamu zaměstnanců i ze všech přiřazených zakázek.`,
+    );
+    if (!ok) return;
+    try {
+      await api.delete(`/employees/${emp.id}`);
+      await load();
+    } catch (e: any) {
+      const msg = getApiErrorMessage(e);
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        // eslint-disable-next-line no-alert
+        window.alert("Chyba: " + msg);
+      } else {
+        Alert.alert("Chyba", msg);
+      }
+    }
+  }
+
+  async function copyCode() {
+    if (!ownerCode) return;
+    try {
+      await Clipboard.setStringAsync(ownerCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // ignore
+    }
   }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <AppHeader title="Zaměstnanci" back />
       <ScrollView contentContainerStyle={styles.container}>
+        {ownerCode ? (
+          <View style={styles.codeCard} testID="company-code-card">
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Ionicons name="business" size={20} color={theme.colors.primary} />
+              <Text style={styles.codeCardTitle}>Identifikátor vaší firmy</Text>
+            </View>
+            <Text style={styles.codeCardSub}>
+              Předejte jej zaměstnancům spolu s PIN. Zaměstnanci jej zadávají při přihlášení, aby se přihlásili pod správnou firmu.
+            </Text>
+            <TouchableOpacity onPress={copyCode} activeOpacity={0.7} style={styles.codeRow} testID="copy-company-code">
+              <Text style={styles.codeValue} selectable>{ownerCode}</Text>
+              <View style={styles.copyBtn}>
+                <Ionicons name={copied ? "checkmark" : "copy-outline"} size={16} color="#fff" />
+                <Text style={styles.copyBtnText}>{copied ? "Zkopírováno" : "Kopírovat"}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <Text style={styles.intro}>
-          Zaměstnanci se přihlašují svým 4místným PIN. Mohou vidět pouze přiřazené zakázky bez cen.
+          Zaměstnanci se přihlašují pomocí <Text style={{ fontWeight: "800", color: theme.colors.text }}>identifikátoru firmy + 4místného PIN</Text>. Vidí pouze zakázky, které jim přiřadíte (bez cen).
         </Text>
 
         {loading ? null : items.length === 0 ? (
@@ -211,4 +263,36 @@ const styles = StyleSheet.create({
     padding: 22,
   },
   sheetTitle: { fontSize: 18, fontWeight: "800", color: theme.colors.text, marginBottom: 14 },
+  codeCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.card,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  codeCardTitle: { fontSize: 14, fontWeight: "800", color: theme.colors.text },
+  codeCardSub: { color: theme.colors.textMuted, fontSize: 12, marginTop: 6, lineHeight: 17 },
+  codeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
+    backgroundColor: theme.colors.surfaceMuted,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 8,
+  },
+  codeValue: { fontSize: 26, fontWeight: "900", letterSpacing: 6, color: theme.colors.text },
+  copyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  copyBtnText: { color: "#fff", fontWeight: "800", fontSize: 12 },
 });

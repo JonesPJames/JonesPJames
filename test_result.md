@@ -276,9 +276,70 @@ frontend:
 
 metadata:
   created_by: "main_agent"
-  version: "1.1"
-  test_sequence: 1
+  version: "1.2"
+  test_sequence: 2
   run_ui: false
+
+backend:
+  - task: "Auth - PIN login s company_code (v2)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "PASS všech 7 sub-testů (A.1-A.7). {JG756Z, 4998} → 200 ZAM-001 Petr Šimek (cc=JG756Z); lowercase {jg756z, 4998} → 200 (case-insensitive .upper() funguje); WRONG1+4998 → 401 'Neplatný identifikátor firmy nebo PIN'; JG756Z+0000 → 401; ''+4998 → 400 'Zadejte identifikátor firmy (6 znaků)'; JG756Z+'12' → 400 'PIN musí mít 4 číslice'; bez company_code → 400."
+
+  - task: "Register vytváří unique company_code (v2)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "PASS B.1-B.3. POST /auth/register vrací user.company_code=6znaků z abecedy [ABCDEFGHJKMNPQRSTUVWXYZ23456789] (bez 0/O/1/I/L). GET /auth/me vrací stejné kódování. Vytvořeno 6 účtů → všech 6 unique company_codes (REFFGV, R73KUG, GN2W3D, 722V7U, XXEZFB, T83VZH)."
+
+  - task: "Multi-tenant izolace - 2 firmy se stejným PINem (v2)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "PASS C.1-C.8. Klíčový test: vytvořeny 2 firmy A (7958NF) a B (2CKXYG), v firmě A založen Honza A s PIN 7169. V firmě B vytvořeno 30 zaměstnanců bez PIN-collision chyby; následně přes přímý DB insert vynucen duplicitní PIN 7169 v firmě B (ZAM-FORCE-99) — kompozitní index (owner_user_id, pin) povolí. Login {code_a, 7169} → vrátí Honza A (ZAM-001 z firmy A); login {code_b, 7169} → vrátí ZAM-FORCE-99 z firmy B (NIKDY ne Honzu A); cross login {code_a, pin existující jen v B} → 401 'Neplatný identifikátor firmy nebo PIN'. Multi-tenancy 100% správně izolovaná."
+
+  - task: "DELETE /api/employees/{id} (regrese, v2)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "PASS D.0-D.3. POST /employees vytvoří, DELETE /employees/{id} → 200 {ok: true}, GET /employees neobsahuje smazaného, DELETE /employees/INVALID → 404."
+
+  - task: "POST /api/employees ukládá owner's company_code (v2)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "PASS E.1. POST /employees u admin (company_code=JG756Z) → response.company_code=JG756Z. Doc je správně persistován s company_code z user.company_code."
 
 test_plan:
   current_focus: []
@@ -309,3 +370,52 @@ agent_communication:
        7) PDF endpointy: všechny 3 (quote, billing, variants) podporují ?token= autorizaci, vrací application/pdf, obsahují řetězec "James P. Jones 2026" (ověřeno přes pypdf extract_text).
        8) Migrace 14d splatnosti: 0 jobů s "Splatnost 14 dní od vystavení faktury." v DB.
        Žádné kritické bugy. Backend je zelený.
+    -agent: "testing"
+    -message: |
+       V2 multi-tenant testing dokončen — 36/36 testů PASS proti veřejné URL (https://tradesmen-quotes.preview.emergentagent.com/api). Test suite: /app/backend_test_v2.py.
+
+       A) /auth/login-pin s company_code (7/7 PASS):
+         - {JG756Z, 4998} → 200 ZAM-001 Petr Šimek (cc=JG756Z)
+         - case-insensitive {jg756z, 4998} → 200 (backend .upper() funguje)
+         - {WRONG1, 4998} → 401 'Neplatný identifikátor firmy nebo PIN'
+         - {JG756Z, 0000} → 401
+         - {'', 4998} → 400 'Zadejte identifikátor firmy (6 znaků)'
+         - {JG756Z, '12'} → 400 'PIN musí mít 4 číslice'
+         - {pin: 4998} bez company_code → 400 'Zadejte identifikátor firmy'
+
+       B) Register vytváří unique company_code (3/3 PASS):
+         - 6-znakový string z abecedy [ABCDEFGHJKMNPQRSTUVWXYZ23456789] (žádné 0/O/1/I/L)
+         - GET /auth/me vrací stejný code jako z register
+         - 6 paralelně vytvořených účtů → 6 unique kódů
+
+       C) Multi-tenant izolace - KLÍČOVÝ TEST (8/8 PASS):
+         - Vytvořeny firmy A (7958NF) a B (2CKXYG), každá s vlastním adminem.
+         - 30 zaměstnanců v firmě B vytvořeno bez kolize indexu.
+         - Vynucený duplicitní PIN přes přímý DB insert (kompozitní index (owner_user_id, pin) povolí) → ZAM-FORCE-99 v B se stejným PINem jako Honza A v A.
+         - Login {code_a, PIN_A} → vrátí Honza A.
+         - Login {code_b, PIN_A} → vrátí ZAM-FORCE-99 z B (NIKDY ne Honza A).
+         - Cross-login {code_a, PIN existující jen v B} → 401.
+         Multi-tenancy 100% bezpečně izolovaná.
+
+       D) DELETE /api/employees/{id} regrese (4/4 PASS): 200, GET nezahrnuje, INVALID → 404.
+
+       E) POST /api/employees ukládá owner.company_code (1/1 PASS): emp.company_code=JG756Z u admin.
+
+       F) Regrese (10/10 PASS): /auth/login owner, /auth/me obsahuje company_code, admin code = JG756Z, POST /jobs OK, AI invarianty A>=base, B<=A*1.15, C<=B*1.20, záruky max 48m, všechny 3 PDF endpointy obsahují 'James P. Jones 2026' (ověřeno přes pypdf extract_text).
+
+       Test data po sobě uklizena (ZAM-FORCE-99 odstraněn, testovací jobs deleted). Žádné kritické bugy. Backend v2 zelený.
+    -agent: "main"
+    -message: |
+       NOVÉ ZMĚNY (v2): Multi-tenancy přes company_code.
+       1) PIN login NYNÍ vyžaduje company_code (6 znaků) + PIN. Endpoint /api/auth/login-pin přijímá {company_code, pin}.
+       2) Při registraci se generuje 6-znakový unique company_code (abeceda bez 0/O/1/I/L).
+       3) Migrace na startu: stávající users a employees dostali company_code (admin → JG756Z).
+       4) Index pin_1 (globální unique) shozen, nahrazen kompozitním (owner_user_id, pin) — různé firmy mohou mít stejný PIN.
+       5) Frontend: login screen má 2 inputy (company_code + PIN); zamestnanci má kartu s firma codem + Kopírovat; profil zobrazuje code; mazání zaměstnance opraveno (window.confirm na webu).
+       Test creds: admin@remeslnikpro.cz/admin123 + code=JG756Z, employee PIN 4998 + code=JG756Z.
+       Otestuj prosím:
+       a) POST /auth/register vytvoří user s neprázdným unique company_code; GET /auth/me ho vrací.
+       b) POST /auth/login-pin: 400 bez code, 401 se špatným code, 200 se správnou kombinací; case-insensitive vstup company_code.
+       c) Multi-tenant izolace: registruj 2. ownera, vytvoř u něj employee s identickým PINem jako má 1. firma → MUSÍ projít, login s každým company_code vrátí svého employee.
+       d) DELETE /api/employees/{id} stále funguje (regrese).
+       e) POST /api/employees uloží company_code z ownera.

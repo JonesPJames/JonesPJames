@@ -82,7 +82,15 @@ def public_user(u: dict) -> dict:
         "name": u.get("name", ""),
         "company": u.get("company", ""),
         "phone": u.get("phone", ""),
+        "company_code": u.get("company_code", ""),
     }
+
+# Easily-readable code generator (avoids confusing chars 0/O, 1/I/L)
+_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+def _gen_company_code() -> str:
+    import secrets
+    return "".join(secrets.choice(_CODE_ALPHABET) for _ in range(6))
 
 async def get_current_user(request: Request) -> dict:
     """Owner-only authentication. Raises 403 if employee token."""
@@ -256,6 +264,10 @@ async def register(payload: RegisterIn, response: Response):
     if existing:
         raise HTTPException(status_code=400, detail="Email je již registrován")
     user_id = str(uuid.uuid4())
+    # generate unique company_code
+    code = _gen_company_code()
+    while await db.users.find_one({"company_code": code}):
+        code = _gen_company_code()
     user_doc = {
         "id": user_id,
         "email": email,
@@ -263,6 +275,7 @@ async def register(payload: RegisterIn, response: Response):
         "name": payload.name,
         "company": payload.company or "",
         "phone": payload.phone or "",
+        "company_code": code,
         "created_at": now_utc(),
     }
     await db.users.insert_one(user_doc)
@@ -1012,6 +1025,7 @@ class EmployeeUpdate(BaseModel):
 
 class PinLoginIn(BaseModel):
     pin: str
+    company_code: str = ""
 
 def public_employee(e: dict) -> dict:
     return {
@@ -1022,6 +1036,7 @@ def public_employee(e: dict) -> dict:
         "trade": e.get("trade", ""),
         "active": e.get("active", True),
         "owner_user_id": e.get("owner_user_id"),
+        "company_code": e.get("company_code", ""),
     }
 
 @api.get("/employees")
@@ -1049,6 +1064,7 @@ async def create_employee(payload: EmployeeCreate, user: dict = Depends(get_curr
     doc = {
         "id": emp_id,
         "owner_user_id": user["id"],
+        "company_code": user.get("company_code", ""),
         "name": payload.name,
         "phone": payload.phone,
         "pin": pin,
@@ -1085,11 +1101,21 @@ async def delete_employee(emp_id: str, user: dict = Depends(get_current_user)):
 @api.post("/auth/login-pin")
 async def login_pin(payload: PinLoginIn):
     pin = (payload.pin or "").strip()
+    code = (payload.company_code or "").strip().upper()
     if len(pin) != 4 or not pin.isdigit():
         raise HTTPException(400, "PIN musí mít 4 číslice")
-    emp = await db.employees.find_one({"pin": pin, "active": True}, {"_id": 0})
+    if not code:
+        raise HTTPException(400, "Zadejte identifikátor firmy (6 znaků)")
+    # Find owner by company_code first
+    owner = await db.users.find_one({"company_code": code}, {"_id": 0, "id": 1})
+    if not owner:
+        raise HTTPException(401, "Neplatný identifikátor firmy nebo PIN")
+    emp = await db.employees.find_one(
+        {"pin": pin, "owner_user_id": owner["id"], "active": True},
+        {"_id": 0},
+    )
     if not emp:
-        raise HTTPException(401, "Neplatný PIN")
+        raise HTTPException(401, "Neplatný identifikátor firmy nebo PIN")
     token = create_employee_token(emp["id"], emp["owner_user_id"])
     return {
         "employee": public_employee(emp),
@@ -1331,12 +1357,47 @@ async def startup():
     await db.jobs.create_index("id", unique=True)
     await db.quote_variants.create_index("id", unique=True)
     await db.employees.create_index([("owner_user_id", 1), ("id", 1)], unique=True)
-    await db.employees.create_index("pin", unique=True, sparse=True)
+    # PIN must be unique only WITHIN a single company, not globally.
+    # Drop the legacy global-unique pin index if present.
+    try:
+        idx_info = await db.employees.index_information()
+        if "pin_1" in idx_info:
+            await db.employees.drop_index("pin_1")
+            logger.info("Dropped legacy global-unique pin_1 index")
+    except Exception as e:
+        logger.warning("Could not inspect/drop pin_1 index: %s", e)
+    await db.employees.create_index([("owner_user_id", 1), ("pin", 1)], unique=True, sparse=True)
+    # Unique company_code per user
+    await db.users.create_index("company_code", unique=True, sparse=True)
+
+    # Migration: assign company_code to legacy users that don't have one yet
+    legacy_cursor = db.users.find({"$or": [{"company_code": {"$exists": False}}, {"company_code": ""}]})
+    async for u in legacy_cursor:
+        # Generate unique code
+        code = _gen_company_code()
+        for _ in range(10):
+            if not await db.users.find_one({"company_code": code}):
+                break
+            code = _gen_company_code()
+        await db.users.update_one({"id": u["id"]}, {"$set": {"company_code": code}})
+        logger.info("Backfilled company_code=%s for user %s", code, u.get("email"))
+
+    # Migration: backfill company_code on existing employees from their owner
+    emp_cursor = db.employees.find({"$or": [{"company_code": {"$exists": False}}, {"company_code": ""}]})
+    async for e in emp_cursor:
+        owner = await db.users.find_one({"id": e.get("owner_user_id")}, {"_id": 0, "company_code": 1})
+        if owner and owner.get("company_code"):
+            await db.employees.update_one({"id": e["id"], "owner_user_id": e["owner_user_id"]}, {"$set": {"company_code": owner["company_code"]}})
+
     # seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
     admin_pass = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})
     if not existing:
+        # generate unique company_code for seeded admin
+        code = _gen_company_code()
+        while await db.users.find_one({"company_code": code}):
+            code = _gen_company_code()
         await db.users.insert_one({
             "id": str(uuid.uuid4()),
             "email": admin_email,
@@ -1344,9 +1405,10 @@ async def startup():
             "name": "Admin Řemeslník",
             "company": "Řemeslník Pro s.r.o.",
             "phone": "+420 777 123 456",
+            "company_code": code,
             "created_at": now_utc(),
         })
-        logger.info("Seeded admin user %s", admin_email)
+        logger.info("Seeded admin user %s with company_code=%s", admin_email, code)
     elif not verify_password(admin_pass, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pass)}})
 

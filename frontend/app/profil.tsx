@@ -50,6 +50,12 @@ export default function Profil() {
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           <View style={styles.card}>
             <Text style={styles.email}>{user?.email}</Text>
+            {user?.company_code ? (
+              <View style={styles.codeStrip}>
+                <Text style={styles.codeStripLabel}>Identifikátor firmy</Text>
+                <Text style={styles.codeStripValue} selectable>{user.company_code}</Text>
+              </View>
+            ) : null}
             <View style={{ height: 14 }} />
             <Field label="Jméno a příjmení" value={name} onChangeText={setName} testID="p-name" />
             <Field label="Název firmy" value={company} onChangeText={setCompany} testID="p-company" />
@@ -76,4 +82,14 @@ const styles = StyleSheet.create({
     ...theme.shadow.card,
   },
   email: { color: theme.colors.textMuted, fontSize: 14, fontStyle: "italic" },
+  codeStrip: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
+  },
+  codeStripLabel: { fontSize: 11, color: theme.colors.textMuted, fontWeight: "700", letterSpacing: 1.4 },
+  codeStripValue: { fontSize: 22, fontWeight: "900", letterSpacing: 6, color: theme.colors.text, marginTop: 2 },
 });

@@ -28,6 +28,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pin, setPin] = useState("");
+  const [companyCode, setCompanyCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -39,7 +40,7 @@ export default function Login() {
         await login(email.trim(), password);
         router.replace("/home");
       } else {
-        await loginEmployee(pin);
+        await loginEmployee(companyCode.trim().toUpperCase(), pin);
         router.replace("/employee");
       }
     } catch (e: any) {
@@ -107,8 +108,20 @@ export default function Login() {
             ) : (
               <>
                 <Text style={styles.h2}>Přihlášení zaměstnance</Text>
-                <Text style={styles.muted}>Zadejte 4místný PIN, který vám předal vlastník</Text>
+                <Text style={styles.muted}>Zadejte identifikátor firmy (6 znaků) a 4místný PIN, který vám předal vlastník.</Text>
                 <View style={{ height: 16 }} />
+                <Text style={styles.pinLabel}>Identifikátor firmy</Text>
+                <TextInput
+                  value={companyCode}
+                  onChangeText={(t) => setCompanyCode(t.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6))}
+                  autoCapitalize="characters"
+                  maxLength={6}
+                  placeholder="NAPŘ. JG756Z"
+                  placeholderTextColor={theme.colors.placeholder}
+                  style={styles.codeInput}
+                  testID="login-company-code"
+                />
+                <View style={{ height: 12 }} />
                 <Text style={styles.pinLabel}>PIN</Text>
                 <TextInput
                   value={pin}
@@ -201,6 +214,20 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: "800",
     marginBottom: 14,
+  },
+  codeInput: {
+    fontSize: 22,
+    textAlign: "center",
+    letterSpacing: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    color: theme.colors.text,
+    fontWeight: "800",
+    marginBottom: 4,
   },
   altText: { textAlign: "center", color: theme.colors.textMuted, fontSize: 14 },
   err: {
