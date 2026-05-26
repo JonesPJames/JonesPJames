@@ -20,7 +20,6 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 # ---------- Config ----------
 JWT_ALGORITHM = "HS256"
