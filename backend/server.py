@@ -359,7 +359,6 @@ async def update_job(job_id: str, payload: JobUpdate, user: dict = Depends(get_c
     if not existing:
         raise HTTPException(404, "Zakázka nenalezena")
     if existing.get("finalized"):
-        # only allow toggling finalized off via payload? No — locked.
         if payload.finalized is None or payload.finalized is True:
             raise HTTPException(400, "Vyúčtování je uzamčeno")
 
@@ -375,7 +374,6 @@ async def update_job(job_id: str, payload: JobUpdate, user: dict = Depends(get_c
         new_status = data["status"]
         update["status"] = new_status
         if new_status == "odlozeno":
-            # set postponed_at if changing to odlozeno
             if existing.get("status") != "odlozeno" or not existing.get("postponed_at"):
                 update["postponed_at"] = now_utc()
     update["updated_at"] = now_utc()
@@ -404,12 +402,34 @@ async def delete_job(job_id: str, user: dict = Depends(get_current_user)):
 
 # ---------- AI ----------
 async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) -> str:
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id=session_id or str(uuid.uuid4()),
-        system_message=system,
-    ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-    return await chat.send_message(UserMessage(text=prompt))
+    import asyncio
+    import urllib.request
+    import json
+
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="V nastavení chybí API klíč pro Gemini (EMERGENT_LLM_KEY)")
+
+    def _run_request():
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={EMERGENT_LLM_KEY}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "systemInstruction": {"parts": [{"text": system}]}
+        }
+        req = urllib.request.Request(
+            url, 
+            data=json.dumps(payload).encode("utf-8"), 
+            headers={"Content-Type": "application/json"}, 
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=15) as response:
+            res = json.loads(response.read().decode("utf-8"))
+            return res["candidates"][0]["content"]["parts"][0]["text"]
+
+    try:
+        return await asyncio.to_thread(_run_request)
+    except Exception as e:
+        logger.error(f"Gemini API chyba: {e}")
+        raise HTTPException(status_code=500, detail=f"Gemini API selhalo: {e}")
 
 class MaterialPriceIn(BaseModel):
     name: str
@@ -448,7 +468,7 @@ async def ai_enhance(payload: EnhanceIn, user: dict = Depends(get_current_user))
     sys = (
         "Jsi profesionální český řemeslník a copywriter. Přepiš vstup do jasného, "
         "profesionálního a strukturovaného popisu rozsahu zakázky pro klienta. "
-        "Použij krátké odstavce a odrážky. Maximálně 200 slov. Pouze česky."
+        "Použij krátké odstavce and odrážky. Maximálně 200 slov. Pouze česky."
     )
     try:
         out = await _llm_call(sys, payload.text)
@@ -471,31 +491,23 @@ class GenerateVariantsIn(BaseModel):
 
 @api.post("/ai/generate-variants")
 async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends(get_current_user)):
-    # ---------- 1) Compute STRICT target prices server-side ----------
     base = float(payload.cena_material + payload.cena_prace + payload.cena_doprava)
     if base <= 0:
-        # fallback for purely descriptive entries — minimum 50 000 Kč baseline
         base = 50000.0
 
-    # Premium factors (applied to A only, never below 1.0)
     narocnost_mult = {"nizka": 1.00, "stredni": 1.04, "vysoka": 1.10}[payload.narocnost]
     urgence_mult = {"bezna": 1.00, "zvysena": 1.06, "expresni": 1.15}[payload.urgence]
     klient_mult = {"bezny": 1.00, "firemni": 1.03, "vip": 1.08}[payload.typ_klienta]
     a_factor = max(1.0, narocnost_mult * urgence_mult * klient_mult)
 
-    # Pick spreads inside the allowed bands
-    # B must be > A and ≤ A * 1.15  → pick +10 %
-    # C must be > B and ≤ B * 1.20  → pick +15 %
     b_spread = 0.10
     c_spread = 0.15
-    # On expresní + vip we widen toward the limits to feel realistic
     if payload.urgence == "expresni":
         b_spread = 0.13
     if payload.typ_klienta == "vip":
         c_spread = 0.18
 
     def round_clean(n: float) -> float:
-        # Round to nearest 100 Kč for natural-looking prices
         return float(int(round(n / 100.0) * 100))
 
     A = round_clean(base * a_factor)
@@ -516,7 +528,6 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
         if C <= B:
             C = B + 100.0
 
-    # ---------- 2) Ask AI to write only descriptions/scope (NOT prices) ----------
     sys = (
         "Jsi expert na cenotvorbu a tvorbu nabídek pro české řemeslné firmy. "
         "Vytvoř TŘI varianty nabídky ve formátu JSON pole se 3 prvky a NIC JINÉHO. "
@@ -560,7 +571,6 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
         if not isinstance(variants_raw, list) or len(variants_raw) < 3:
             raise ValueError("AI nevrátila 3 varianty")
 
-        # ---------- 3) Force prices server-side to guarantee compliance ----------
         prices = [A, B, C]
         defaults_nazev = ["🥉 Základní", "🥇 Zlatá střední cesta", "💎 Premium"]
         variants = []
@@ -577,7 +587,6 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
             v["popis"] = v.get("popis", "")
             variants.append(v)
 
-        # Hard-validate the math invariants (guard against rare edge cases)
         if not (variants[0]["cena_kc"] >= base):
             variants[0]["cena_kc"] = round_clean(base)
         if not (variants[1]["cena_kc"] > variants[0]["cena_kc"]):
@@ -589,7 +598,6 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
         if not (variants[2]["cena_kc"] <= variants[1]["cena_kc"] * 1.20):
             variants[2]["cena_kc"] = round_clean(variants[1]["cena_kc"] * 1.20)
 
-        # Cap warranty at 48 months for ALL variants
         import re as _re
         warranty_defaults = ["24 měsíců", "36 měsíců", "48 měsíců"]
         for i, v in enumerate(variants):
@@ -597,7 +605,6 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
             m = _re.search(r"(\d{1,3})", z)
             if m:
                 months = int(m.group(1))
-                # If unit is years, convert
                 if "rok" in z.lower() or "let" in z.lower():
                     months = months * 12
                 if months > 48:
@@ -632,13 +639,10 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-    )
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
 
-    # Try to register a font that supports Czech diacritics
     try:
         pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
         pdfmetrics.registerFont(TTFont("DejaVu-Bold", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
@@ -657,7 +661,6 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     small = ParagraphStyle("small", parent=body, fontSize=9, textColor=colors.HexColor("#68635c"))
 
     elems = []
-    # Header
     header = Table([[
         Paragraph(f"<b>Cenová nabídka č. {job['job_number']}</b>", h1),
         Paragraph(f"<b>{user.get('company') or user.get('name','')}</b><br/>{user.get('name','')}<br/>Tel: {user.get('phone','')}<br/>{user.get('email','')}", small),
@@ -872,7 +875,7 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     try:
@@ -1014,7 +1017,7 @@ def _gen_pin(existing: set[str]) -> str:
 class EmployeeCreate(BaseModel):
     name: str
     phone: str = ""
-    trade: str = ""  # e.g. "zednik", "obkladac" — controls default tool list
+    trade: str = ""  # e.g. "zednik", "obkladac"
 
 class EmployeeUpdate(BaseModel):
     name: Optional[str] = None
@@ -1045,7 +1048,6 @@ async def list_employees(user: dict = Depends(get_current_user)):
 
 @api.post("/employees")
 async def create_employee(payload: EmployeeCreate, user: dict = Depends(get_current_user)):
-    # human-readable id ZAM-NNN per owner
     cursor = db.employees.find({"owner_user_id": user["id"]}, {"_id": 0, "id": 1, "pin": 1})
     items = [e async for e in cursor]
     used_pins = {e["pin"] for e in items}
@@ -1090,7 +1092,6 @@ async def delete_employee(emp_id: str, user: dict = Depends(get_current_user)):
     res = await db.employees.delete_one({"id": emp_id, "owner_user_id": user["id"]})
     if res.deleted_count == 0:
         raise HTTPException(404, "Zaměstnanec nenalezen")
-    # remove from any job assignments
     await db.jobs.update_many(
         {"user_id": user["id"]},
         {"$pull": {"assigned_employee_ids": emp_id}},
@@ -1105,7 +1106,6 @@ async def login_pin(payload: PinLoginIn):
         raise HTTPException(400, "PIN musí mít 4 číslice")
     if not code:
         raise HTTPException(400, "Zadejte identifikátor firmy (6 znaků)")
-    # Find owner by company_code first
     owner = await db.users.find_one({"company_code": code}, {"_id": 0, "id": 1})
     if not owner:
         raise HTTPException(401, "Neplatný identifikátor firmy nebo PIN")
@@ -1163,7 +1163,7 @@ def _employee_job_view(job: dict) -> dict:
         "status": job.get("status"),
         "effective_status": job.get("effective_status"),
         "material": _strip_prices(job.get("material", [])),
-        "prace": _strip_prices(job.get("prace", [])),  # description only, no prices
+        "prace": _strip_prices(job.get("prace", [])),
         "diary_entries": job.get("diary_entries", []),
         "vicepracovne_proposals": job.get("vicepracovne_proposals", []),
         "assigned_employee_ids": job.get("assigned_employee_ids", []),
@@ -1299,11 +1299,9 @@ async def employee_confirm_checklist(job_id: str, actor: dict = Depends(require_
     await db.jobs.update_one({"id": job_id}, {"$set": {"tool_checklists": checklists, "updated_at": now_utc()}})
     return {"ok": True, "checklist": cur}
 
-
-
 class ResolveProposalIn(BaseModel):
     action: Literal["approve", "reject"]
-    cena: Optional[float] = 0  # owner sets price on approval
+    cena: Optional[float] = 0
 
 @api.post("/jobs/{job_id}/proposals/{proposal_id}/resolve")
 async def resolve_proposal(job_id: str, proposal_id: str, payload: ResolveProposalIn, user: dict = Depends(get_current_user)):
@@ -1320,7 +1318,6 @@ async def resolve_proposal(job_id: str, proposal_id: str, payload: ResolvePropos
     target["resolved_at"] = now_utc().isoformat()
     update = {"vicepracovne_proposals": proposals, "updated_at": now_utc()}
     if payload.action == "approve":
-        # add to vicepracovne table
         new_row = {
             "id": str(uuid.uuid4()),
             "popis": target["popis"],
@@ -1356,8 +1353,6 @@ async def startup():
     await db.jobs.create_index("id", unique=True)
     await db.quote_variants.create_index("id", unique=True)
     await db.employees.create_index([("owner_user_id", 1), ("id", 1)], unique=True)
-    # PIN must be unique only WITHIN a single company, not globally.
-    # Drop the legacy global-unique pin index if present.
     try:
         idx_info = await db.employees.index_information()
         if "pin_1" in idx_info:
@@ -1366,13 +1361,10 @@ async def startup():
     except Exception as e:
         logger.warning("Could not inspect/drop pin_1 index: %s", e)
     await db.employees.create_index([("owner_user_id", 1), ("pin", 1)], unique=True, sparse=True)
-    # Unique company_code per user
     await db.users.create_index("company_code", unique=True, sparse=True)
 
-    # Migration: assign company_code to legacy users that don't have one yet
     legacy_cursor = db.users.find({"$or": [{"company_code": {"$exists": False}}, {"company_code": ""}]})
     async for u in legacy_cursor:
-        # Generate unique code
         code = _gen_company_code()
         for _ in range(10):
             if not await db.users.find_one({"company_code": code}):
@@ -1381,19 +1373,16 @@ async def startup():
         await db.users.update_one({"id": u["id"]}, {"$set": {"company_code": code}})
         logger.info("Backfilled company_code=%s for user %s", code, u.get("email"))
 
-    # Migration: backfill company_code on existing employees from their owner
     emp_cursor = db.employees.find({"$or": [{"company_code": {"$exists": False}}, {"company_code": ""}]})
     async for e in emp_cursor:
         owner = await db.users.find_one({"id": e.get("owner_user_id")}, {"_id": 0, "company_code": 1})
         if owner and owner.get("company_code"):
             await db.employees.update_one({"id": e["id"], "owner_user_id": e["owner_user_id"]}, {"$set": {"company_code": owner["company_code"]}})
 
-    # seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
     admin_pass = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})
     if not existing:
-        # generate unique company_code for seeded admin
         code = _gen_company_code()
         while await db.users.find_one({"company_code": code}):
             code = _gen_company_code()
@@ -1411,7 +1400,6 @@ async def startup():
     elif not verify_password(admin_pass, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pass)}})
 
-    # One-time migration: clear legacy default payment_note
     try:
         await db.jobs.update_many(
             {"payment_note": "Splatnost 14 dní od vystavení faktury."},
