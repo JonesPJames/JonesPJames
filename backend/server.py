@@ -447,23 +447,19 @@ async def delete_job(job_id: str, user: dict = Depends(get_current_user)):
 # ---------- AI ----------
 async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) -> str:
     import asyncio
-    from google import genai
-    from google.genai import types
+    import google.generativeai as genai
 
     if not EMERGENT_LLM_KEY:
-        raise HTTPException(status_code=500, detail="V nastavení chybí API klíč pro Gemini (EMERGENT_LLM_KEY)")
+        raise HTTPException(status_code=500, detail="V nastavení chybí API klíč")
 
     def _run_request():
-        client = genai.Client(api_key=EMERGENT_LLM_KEY)
-        
-        # JEDINÉ FUNKČNÍ ŘEŠENÍ: Používáme tvůj model gemini-3.5-flash pod novým SDK
-        response = client.models.generate_content(
-            model='gemini-3.5-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system,
-            ),
+        # Použití ověřeného SDK a modelu
+        genai.configure(api_key=EMERGENT_LLM_KEY)
+        model = genai.GenerativeModel(
+            model_name="gemini-3.5-flash",
+            system_instruction=system
         )
+        response = model.generate_content(prompt)
         return response.text
 
     try:
