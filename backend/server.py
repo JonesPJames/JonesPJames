@@ -453,7 +453,6 @@ async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) 
         raise HTTPException(status_code=500, detail="V nastavení chybí API klíč")
 
     def _run_request():
-        # Použití ověřeného SDK a modelu
         genai.configure(api_key=EMERGENT_LLM_KEY)
         model = genai.GenerativeModel(
             model_name="gemini-3.5-flash",
