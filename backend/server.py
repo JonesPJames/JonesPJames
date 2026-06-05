@@ -1414,7 +1414,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    _ensure_fonts()
+    # _ensure_fonts()  <-- ZAKOMENTUJ TENTO ŘÁDEK (přidej # na začátek)
+    await db.users.create_index("email", unique=True)
+    # ... zbytek kódu nech tak jak je
     await db.users.create_index("email", unique=True)
     await db.jobs.create_index([("user_id", 1), ("created_at", -1)])
     await db.jobs.create_index("id", unique=True)
