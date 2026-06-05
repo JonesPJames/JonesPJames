@@ -1,7 +1,7 @@
 """Řemeslník Pro 1.0 - Backend"""
 from dotenv import load_dotenv
 from pathlib import Path
-# FORCE REBUILD KVALI ZASEK KREDITU - GEMINI 2.0
+# UPDATE NA UPLET NEJNOVĚJŠÍ GEMINI 3.5 FLASH
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -443,7 +443,7 @@ async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) 
     def _run_request():
         genai.configure(api_key=EMERGENT_LLM_KEY)
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            model_name="gemini-3.5-flash",
             system_instruction=system
         )
         response = model.generate_content(prompt)
