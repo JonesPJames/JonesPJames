@@ -97,33 +97,6 @@ def safe_float(v, default=0.0) -> float:
     except Exception:
         return default
 
-def _ensure_fonts():
-    import urllib.request
-    import os
-    font_dir = ROOT_DIR / "fonts"
-    font_dir.mkdir(exist_ok=True)
-    urls = {
-        "DejaVuSans.ttf": "https://github.com/aaronshaf/dejavu-sans-ttf/raw/master/ttf/DejaVuSans.ttf",
-        "DejaVuSans-Bold.ttf": "https://github.com/aaronshaf/dejavu-sans-ttf/raw/master/ttf/DejaVuSans-Bold.ttf"
-    }
-    for name, url in urls.items():
-        p = font_dir / name
-        
-        # Pojistka: Pokud soubor existuje, ale je podezřele malý (zmetek HTML), smažeme ho
-        if p.exists() and os.path.getsize(p) < 100000:
-            p.unlink()
-            
-        if not p.exists():
-            try:
-                logger.info(f"Stahuji nezbytný český font {name} pro PDF...")
-                # Zamaskujeme se jako normální webový prohlížeč
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-                with urllib.request.urlopen(req) as response, open(p, 'wb') as out_file:
-                    out_file.write(response.read())
-                logger.info(f"Font {name} byl úspěšně stažen.")
-            except Exception as e:
-                logger.error(f"Selhalo stahování fontu {name}: {e}")
-
 # Easily-readable code generator (avoids confusing chars 0/O, 1/I/L)
 _CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
@@ -227,6 +200,7 @@ class JobUpdate(BaseModel):
     vicepracovne: Optional[List[LineItem]] = None
     material_navic: Optional[List[LineItem]] = None
     diary_entries: Optional[List["DiaryEntry"]] = None
+    zaloha_castka: Optional[float] = None
 
 class DiaryEntry(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -264,10 +238,16 @@ def compute_totals(job: dict) -> dict:
     trans = sum_lines(job.get("doprava"))
     extra_work = sum_lines(job.get("vicepracovne"))
     extra_mat = sum_lines(job.get("material_navic"))
+    
+    # Automatický výpočet zálohy: 100% materiál + 100% doprava + 30% práce
+    auto_zaloha = (mat + trans) + (0.3 * work)
+    final_zaloha = safe_float(job.get("zaloha_castka"), auto_zaloha)
+    
     return {
         "cena_prace": work,
         "cena_material": mat,
         "cena_doprava": trans,
+        "zaloha": final_zaloha,
         "celkem": work + mat + trans,
         "vicepracovne_total": extra_work + extra_mat,
         "celkem_k_fakturaci": work + mat + trans + extra_work + extra_mat,
@@ -368,6 +348,7 @@ async def create_job(payload: JobCreate, user: dict = Depends(get_current_user))
         "photo_url": "",
         "payment_note": "",
         "finalized": False,
+        "zaloha_castka": None,
         "created_at": now_utc(),
         "updated_at": now_utc(),
         "postponed_at": None,
@@ -408,7 +389,7 @@ async def update_job(job_id: str, payload: JobUpdate, user: dict = Depends(get_c
 
     update = {}
     data = payload.model_dump(exclude_unset=True)
-    for k in ["client_name", "address", "title", "photo_url", "payment_note", "finalized"]:
+    for k in ["client_name", "address", "title", "photo_url", "payment_note", "finalized", "zaloha_castka"]:
         if k in data:
             update[k] = data[k]
     for k in ["prace", "material", "doprava", "vicepracovne", "material_navic", "diary_entries"]:
@@ -450,7 +431,7 @@ async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) 
     import google.generativeai as genai
 
     if not EMERGENT_LLM_KEY:
-        raise HTTPException(status_code=500, detail="V nastavení chybí API klíč")
+        raise HTTPException(status_code=500, detail="V nastavení chybí API klíč pro Gemini (EMERGENT_LLM_KEY)")
 
     def _run_request():
         genai.configure(api_key=EMERGENT_LLM_KEY)
@@ -593,7 +574,7 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
         f"Vstupní podklad — kalkulovaná základní cena: {int(base)} Kč "
         f"(práce {int(payload.cena_prace)} + materiál {int(payload.cena_material)} + doprava {int(payload.cena_doprava)})\n"
         f"Popis: {payload.description}\n\n"
-        f"Tři varianty majíshift tyhle pevné ceny (Kč):\n"
+        f"Tři varianty mají pevné ceny (Kč):\n"
         f"  A Základní: {int(A)}\n"
         f"  B Zlatá střední cesta: {int(B)} (+{diff_b_pct} % oproti A)\n"
         f"  C Premium: {int(C)} (+{diff_c_pct} % oproti B)\n\n"
@@ -766,15 +747,23 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     trans = section("Doprava, závoz a manipulace", job.get("doprava", []))
 
     elems.append(Spacer(1, 8))
+    
+    # Načtení vypočtené nebo editované zálohy z totals
+    totals = job.get("totals", {})
+    zaloha_k_uhrade = totals.get("zaloha", (mat + trans) + (0.3 * work))
+
     rec = Table([
         ["Cena práce:", _czech_currency(work)],
         ["Cena materiálu:", _czech_currency(mat)],
         ["Doprava a manipulace:", _czech_currency(trans)],
+        ["POŽADOVANÁ ZÁLOHA:", _czech_currency(zaloha_k_uhrade)],
         ["CELKEM:", _czech_currency(work + mat + trans)],
     ], colWidths=[120*mm, 60*mm])
     rec.setStyle(TableStyle([
         ("FONTNAME", (0,0), (-1,-1), font_name),
         ("FONTSIZE", (0,0), (-1,-1), 10),
+        ("FONTNAME", (0,-2), (-1,-2), font_bold),
+        ("TEXTCOLOR", (0,-2), (-1,-2), colors.HexColor("#c9820a")),
         ("FONTNAME", (0,-1), (-1,-1), font_bold),
         ("FONTSIZE", (0,-1), (-1,-1), 13),
         ("BACKGROUND", (0,-1), (-1,-1), colors.HexColor("#fcede3")),
@@ -927,7 +916,6 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
     
-    # OPRAVA PŘEKRÝVÁNÍ TEXTŮ: Zavedení přesné výšky řádků (leading) odpovídající velikosti fontu
     h1 = ParagraphStyle("h1", fontName=fb, fontSize=22, textColor=colors.HexColor("#2d2926"), leading=26, spaceAfter=4)
     h2 = ParagraphStyle("h2", fontName=fb, fontSize=14, textColor=colors.HexColor("#c9820a"), leading=18, spaceBefore=12, spaceAfter=4)
     body = ParagraphStyle("body", fontName=fn, fontSize=10, textColor=colors.HexColor("#2d2926"), leading=14, spaceAfter=2)
@@ -944,19 +932,14 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
     for i, v in enumerate(variants[:3]):
         icon = icons[i] if i < len(icons) else ""
         
-        # Nadpis varianty s dostatečným řádkováním
         elems.append(Paragraph(f"<b>{icon} {v.get('nazev','')}</b>", h2))
-        
-        # Velká cena s vlastním leadingem, aby se nelepila na popis pod sebou
         elems.append(Paragraph(f"<b>{_czech_currency(safe_float(v.get('cena_kc', 0)))}</b>", h1))
         
-        # Krátký popis z AI
         if v.get("popis"):
             elems.append(Paragraph(v.get("popis", ""), body))
             
         elems.append(Paragraph(f"<b>Záruka:</b> {v.get('zaruka','')} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Termín realizace:</b> {v.get('termin','')}", body))
         
-        # Výpis odrážek rozsahu
         if v.get("rozsah"):
             elems.append(Paragraph("<b>Rozsah prací:</b>", body))
             elems.append(Paragraph(v.get("rozsah", "").replace("\n", "<br/>"), body))
@@ -987,7 +970,7 @@ async def get_job_pdf(job_id: str, user: dict = Depends(get_current_user)):
     job = await db.jobs.find_one({"id": job_id, "user_id": user["id"]}, {"_id": 0})
     if not job:
         raise HTTPException(404, "Zakázka nenalezena")
-    pdf = _build_pdf_quote(job, user)
+    pdf = _build_pdf_quote(serialize_job(job), user)
     return StreamingResponse(
         io.BytesIO(pdf),
         media_type="application/pdf",
@@ -999,7 +982,7 @@ async def get_billing_pdf(job_id: str, user: dict = Depends(get_current_user)):
     job = await db.jobs.find_one({"id": job_id, "user_id": user["id"]}, {"_id": 0})
     if not job:
         raise HTTPException(404, "Zakázka nenalezena")
-    pdf = _build_pdf_billing(job, user)
+    pdf = _build_pdf_billing(serialize_job(job), user)
     return StreamingResponse(
         io.BytesIO(pdf),
         media_type="application/pdf",
@@ -1414,9 +1397,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    # _ensure_fonts()  <-- ZAKOMENTUJ TENTO ŘÁDEK (přidej # na začátek)
-    await db.users.create_index("email", unique=True)
-    # ... zbytek kódu nech tak jak je
+    # _ensure_fonts()  <-- ZAKOMENTOVÁNO: fonty načítáme stabilně přímo z vašeho git repozitáře
     await db.users.create_index("email", unique=True)
     await db.jobs.create_index([("user_id", 1), ("created_at", -1)])
     await db.jobs.create_index("id", unique=True)
@@ -1457,7 +1438,7 @@ async def startup():
             "id": str(uuid.uuid4()),
             "email": admin_email,
             "password_hash": hash_password(admin_pass),
-            "name": "Admin?",
+            "name": "Admin",
             "company": "Řemeslník Pro s.r.o.",
             "phone": "+420 777 123 456",
             "company_code": code,
