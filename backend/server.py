@@ -102,8 +102,8 @@ def _ensure_fonts():
     font_dir = ROOT_DIR / "fonts"
     font_dir.mkdir(exist_ok=True)
     urls = {
-        "DejaVuSans.ttf": "https://github.com/aaronshaf/dejavu-sans-ttf/raw/master/ttf/DejaVuSans.ttf",
-        "DejaVuSans-Bold.ttf": "https://github.com/aaronshaf/dejavu-sans-ttf/raw/master/ttf/DejaVuSans-Bold.ttf"
+        "DejaVuSans.ttf": "https://cdn.jsdelivr.net/npm/@canvas-fonts/dejavu-sans@1.0.4/fonts/DejaVuSans.ttf",
+        "DejaVuSans-Bold.ttf": "https://cdn.jsdelivr.net/npm/@canvas-fonts/dejavu-sans@1.0.4/fonts/DejaVuSans-Bold.ttf"
     }
     for name, url in urls.items():
         p = font_dir / name
