@@ -99,6 +99,7 @@ def safe_float(v, default=0.0) -> float:
 
 def _ensure_fonts():
     import urllib.request
+    import os
     font_dir = ROOT_DIR / "fonts"
     font_dir.mkdir(exist_ok=True)
     urls = {
@@ -107,10 +108,18 @@ def _ensure_fonts():
     }
     for name, url in urls.items():
         p = font_dir / name
+        
+        # Pojistka: Pokud soubor existuje, ale je podezřele malý (zmetek HTML), smažeme ho
+        if p.exists() and os.path.getsize(p) < 100000:
+            p.unlink()
+            
         if not p.exists():
             try:
                 logger.info(f"Stahuji nezbytný český font {name} pro PDF...")
-                urllib.request.urlretrieve(url, p)
+                # Zamaskujeme se jako normální webový prohlížeč
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                with urllib.request.urlopen(req) as response, open(p, 'wb') as out_file:
+                    out_file.write(response.read())
                 logger.info(f"Font {name} byl úspěšně stažen.")
             except Exception as e:
                 logger.error(f"Selhalo stahování fontu {name}: {e}")
