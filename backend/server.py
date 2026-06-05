@@ -1,6 +1,7 @@
 """Řemeslník Pro 1.0 - Backend"""
 from dotenv import load_dotenv
 from pathlib import Path
+# FORCE REBUILD KVALI ZASEK KREDITU - GEMINI 2.0
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
