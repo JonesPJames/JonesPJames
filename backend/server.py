@@ -102,8 +102,8 @@ def _ensure_fonts():
     font_dir = ROOT_DIR / "fonts"
     font_dir.mkdir(exist_ok=True)
     urls = {
-        "DejaVuSans.ttf": "https://cdn.jsdelivr.net/npm/@canvas-fonts/dejavu-sans@1.0.4/fonts/DejaVuSans.ttf",
-        "DejaVuSans-Bold.ttf": "https://cdn.jsdelivr.net/npm/@canvas-fonts/dejavu-sans@1.0.4/fonts/DejaVuSans-Bold.ttf"
+        "Roboto-Regular.ttf": "https://github.com/kivy/kivy/raw/master/kivy/data/fonts/Roboto-Regular.ttf",
+        "Roboto-Bold.ttf": "https://github.com/kivy/kivy/raw/master/kivy/data/fonts/Roboto-Bold.ttf"
     }
     for name, url in urls.items():
         p = font_dir / name
@@ -115,7 +115,7 @@ def _ensure_fonts():
             except Exception as e:
                 logger.error(f"Selhalo stahování fontu {name}: {e}")
 
-# Easily-readable code generator (avoids confusing chars 0/O, 1/I/L)
+# Easily-readable code generator
 _CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 def _gen_company_code() -> str:
@@ -123,14 +123,12 @@ def _gen_company_code() -> str:
     return "".join(secrets.choice(_CODE_ALPHABET) for _ in range(6))
 
 async def get_current_user(request: Request) -> dict:
-    """Owner-only authentication. Raises 403 if employee token."""
     actor = await get_current_actor(request)
     if actor.get("role") != "owner":
         raise HTTPException(status_code=403, detail="Pouze pro vlastníka účtu")
     return actor["user"]
 
 async def get_current_actor(request: Request) -> dict:
-    """Returns {role, user, employee, owner_user_id}."""
     token = None
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
@@ -186,7 +184,7 @@ class LineItem(BaseModel):
     popis: str = ""
     mnozstvi: float = 1
     jednotka: str = "ks"
-    cena: float = 0  # Cena/jedn.
+    cena: float = 0
 
     @field_validator("mnozstvi", "cena", mode="before")
     @classmethod
@@ -221,16 +219,15 @@ class JobUpdate(BaseModel):
 
 class DiaryEntry(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    date: str  # ISO date YYYY-MM-DD
+    date: str
     work: str = ""
     weather: str = ""
     workers: str = ""
     notes: str = ""
-    photo_base64: Optional[str] = None  # base64 image
+    photo_base64: Optional[str] = None
 
 JobUpdate.model_rebuild()
 
-# ---------- Job number generation ----------
 async def next_job_number(user_id: str) -> str:
     year = datetime.now().year
     prefix = f"{year}-"
@@ -274,7 +271,6 @@ def serialize_job(job: dict) -> dict:
     if isinstance(job.get("postponed_at"), datetime):
         job["postponed_at"] = job["postponed_at"].isoformat()
     job["totals"] = compute_totals(job)
-    # expiration computation for odlozeno
     if job.get("status") == "odlozeno" and job.get("postponed_at"):
         try:
             pd = datetime.fromisoformat(job["postponed_at"].replace("Z", "+00:00")) if isinstance(job["postponed_at"], str) else job["postponed_at"]
@@ -299,7 +295,6 @@ async def register(payload: RegisterIn, response: Response):
     if existing:
         raise HTTPException(status_code=400, detail="Email je již registrován")
     user_id = str(uuid.uuid4())
-    # generate unique company_code
     code = _gen_company_code()
     while await db.users.find_one({"company_code": code}):
         code = _gen_company_code()
@@ -496,7 +491,7 @@ async def ai_enhance(payload: EnhanceIn, user: dict = Depends(get_current_user))
     sys = (
         "Jsi profesionální český řemeslník a copywriter. Přepiš vstup do jasného, "
         "profesionálního a strukturovaného popisu rozsahu zakázky pro klienta. "
-        "Použij krátké odstavce and odrážky. Maximálně 200 slov. Pouze česky."
+        "Použij krátké odstavce a odrážky. Maximálně 200 slov. Pouze česky."
     )
     try:
         out = await _llm_call(sys, payload.text)
@@ -677,10 +672,10 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     from reportlab.pdfbase.ttfonts import TTFont
 
     try:
-        pdfmetrics.registerFont(TTFont("DejaVu", str(ROOT_DIR / "fonts" / "DejaVuSans.ttf")))
-        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(ROOT_DIR / "fonts" / "DejaVuSans-Bold.ttf")))
-        font_name = "DejaVu"
-        font_bold = "DejaVu-Bold"
+        pdfmetrics.registerFont(TTFont("Roboto", str(ROOT_DIR / "fonts" / "Roboto-Regular.ttf")))
+        pdfmetrics.registerFont(TTFont("Roboto-Bold", str(ROOT_DIR / "fonts" / "Roboto-Bold.ttf")))
+        font_name = "Roboto"
+        font_bold = "Roboto-Bold"
     except Exception:
         font_name = "Helvetica"
         font_bold = "Helvetica-Bold"
@@ -797,9 +792,9 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     try:
-        pdfmetrics.registerFont(TTFont("DejaVu", str(ROOT_DIR / "fonts" / "DejaVuSans.ttf")))
-        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(ROOT_DIR / "fonts" / "DejaVuSans-Bold.ttf")))
-        fn, fb = "DejaVu", "DejaVu-Bold"
+        pdfmetrics.registerFont(TTFont("Roboto", str(ROOT_DIR / "fonts" / "Roboto-Regular.ttf")))
+        pdfmetrics.registerFont(TTFont("Roboto-Bold", str(ROOT_DIR / "fonts" / "Roboto-Bold.ttf")))
+        fn, fb = "Roboto", "Roboto-Bold"
     except Exception:
         fn, fb = "Helvetica", "Helvetica-Bold"
 
@@ -855,7 +850,6 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     e2 = lines_table(job.get("material_navic", []), "Materiál navíc")
     extra_total = e1 + e2
 
-    # Sekce 3 - diary
     elems.append(Paragraph("Sekce 3 — Výpis ze stavebního deníku", h2))
     diary = job.get("diary_entries", [])
     if diary:
@@ -877,7 +871,6 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
         link = job["photo_url"]
         elems.append(Paragraph(f'<link href="{link}" color="#c9820a"><b>📷 Fotodokumentace zakázky →</b></link>', body))
 
-    # Sekce 4 - rekapitulace
     elems.append(Paragraph("Sekce 4 — Rekapitulace", h2))
     rec = Table([
         ["Původní nabídka celkem:", _czech_currency(original_total)],
@@ -912,9 +905,9 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     try:
-        pdfmetrics.registerFont(TTFont("DejaVu", str(ROOT_DIR / "fonts" / "DejaVuSans.ttf")))
-        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(ROOT_DIR / "fonts" / "DejaVuSans-Bold.ttf")))
-        fn, fb = "DejaVu", "DejaVu-Bold"
+        pdfmetrics.registerFont(TTFont("Roboto", str(ROOT_DIR / "fonts" / "Roboto-Regular.ttf")))
+        pdfmetrics.registerFont(TTFont("Roboto-Bold", str(ROOT_DIR / "fonts" / "Roboto-Bold.ttf")))
+        fn, fb = "Roboto", "Roboto-Bold"
     except Exception:
         fn, fb = "Helvetica", "Helvetica-Bold"
 
@@ -1013,7 +1006,6 @@ class ImportPayload(BaseModel):
 
 @api.post("/import/remeslnik-ai")
 async def import_remeslnik(payload: ImportPayload, user: dict = Depends(get_current_user)):
-    """Convert imported JSON to job-ready prace[] and material[]."""
     prace_lines: List[dict] = []
     material_lines: List[dict] = []
 
@@ -1055,7 +1047,7 @@ def _gen_pin(existing: set[str]) -> str:
 class EmployeeCreate(BaseModel):
     name: str
     phone: str = ""
-    trade: str = ""  # e.g. "zednik", "obkladac"
+    trade: str = ""
 
 class EmployeeUpdate(BaseModel):
     name: Optional[str] = None
@@ -1191,7 +1183,6 @@ def _strip_prices(rows):
     return out
 
 def _employee_job_view(job: dict) -> dict:
-    """Strip all prices and totals for employee view."""
     return {
         "id": job["id"],
         "job_number": job.get("job_number"),
@@ -1379,7 +1370,7 @@ async def resolve_proposal(job_id: str, proposal_id: str, payload: ResolvePropos
     return serialize_job(fresh)
 
 # ---------- Health ----------
-@api.get("/")
+@app.get("/")  # OPRAVENO: Navázáno přímo na kořen celého webu pro bezchybný Railway Health Check!
 async def root():
     return {"app": "Remeslnik Pro 1.0", "status": "ok"}
 
@@ -1396,7 +1387,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    _ensure_fonts()  # Automatické stažení českých písem při startu cloudu
+    _ensure_fonts()
     await db.users.create_index("email", unique=True)
     await db.jobs.create_index([("user_id", 1), ("created_at", -1)])
     await db.jobs.create_index("id", unique=True)
@@ -1420,7 +1411,6 @@ async def startup():
                 break
             code = _gen_company_code()
         await db.users.update_one({"id": u["id"]}, {"$set": {"company_code": code}})
-        logger.info("Backfilled company_code=%s for user %s", code, u.get("email"))
 
     emp_cursor = db.employees.find({"$or": [{"company_code": {"$exists": False}}, {"company_code": ""}]})
     async for e in emp_cursor:
@@ -1445,7 +1435,6 @@ async def startup():
             "company_code": code,
             "created_at": now_utc(),
         })
-        logger.info("Seeded admin user %s with company_code=%s", admin_email, code)
     elif not verify_password(admin_pass, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pass)}})
 
