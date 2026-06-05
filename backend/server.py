@@ -1,7 +1,6 @@
 """Řemeslník Pro 1.0 - Backend"""
 from dotenv import load_dotenv
 from pathlib import Path
-# UPDATE NA UPLET NEJNOVĚJŠÍ GEMINI 3.5 FLASH
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -103,8 +102,8 @@ def _ensure_fonts():
     font_dir = ROOT_DIR / "fonts"
     font_dir.mkdir(exist_ok=True)
     urls = {
-        "Roboto-Regular.ttf": "https://github.com/kivy/kivy/raw/master/kivy/data/fonts/Roboto-Regular.ttf",
-        "Roboto-Bold.ttf": "https://github.com/kivy/kivy/raw/master/kivy/data/fonts/Roboto-Bold.ttf"
+        "DejaVuSans.ttf": "https://github.com/aaronshaf/dejavu-sans-ttf/raw/master/ttf/DejaVuSans.ttf",
+        "DejaVuSans-Bold.ttf": "https://github.com/aaronshaf/dejavu-sans-ttf/raw/master/ttf/DejaVuSans-Bold.ttf"
     }
     for name, url in urls.items():
         p = font_dir / name
@@ -116,7 +115,7 @@ def _ensure_fonts():
             except Exception as e:
                 logger.error(f"Selhalo stahování fontu {name}: {e}")
 
-# Easily-readable code generator
+# Easily-readable code generator (avoids confusing chars 0/O, 1/I/L)
 _CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 def _gen_company_code() -> str:
@@ -124,12 +123,14 @@ def _gen_company_code() -> str:
     return "".join(secrets.choice(_CODE_ALPHABET) for _ in range(6))
 
 async def get_current_user(request: Request) -> dict:
+    """Owner-only authentication. Raises 403 if employee token."""
     actor = await get_current_actor(request)
     if actor.get("role") != "owner":
         raise HTTPException(status_code=403, detail="Pouze pro vlastníka účtu")
     return actor["user"]
 
 async def get_current_actor(request: Request) -> dict:
+    """Returns {role, user, employee, owner_user_id}."""
     token = None
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
@@ -185,7 +186,7 @@ class LineItem(BaseModel):
     popis: str = ""
     mnozstvi: float = 1
     jednotka: str = "ks"
-    cena: float = 0
+    cena: float = 0  # Cena/jedn.
 
     @field_validator("mnozstvi", "cena", mode="before")
     @classmethod
@@ -220,15 +221,16 @@ class JobUpdate(BaseModel):
 
 class DiaryEntry(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    date: str
+    date: str  # ISO date YYYY-MM-DD
     work: str = ""
     weather: str = ""
     workers: str = ""
     notes: str = ""
-    photo_base64: Optional[str] = None
+    photo_base64: Optional[str] = None  # base64 image
 
 JobUpdate.model_rebuild()
 
+# ---------- Job number generation ----------
 async def next_job_number(user_id: str) -> str:
     year = datetime.now().year
     prefix = f"{year}-"
@@ -272,6 +274,7 @@ def serialize_job(job: dict) -> dict:
     if isinstance(job.get("postponed_at"), datetime):
         job["postponed_at"] = job["postponed_at"].isoformat()
     job["totals"] = compute_totals(job)
+    # expiration computation for odlozeno
     if job.get("status") == "odlozeno" and job.get("postponed_at"):
         try:
             pd = datetime.fromisoformat(job["postponed_at"].replace("Z", "+00:00")) if isinstance(job["postponed_at"], str) else job["postponed_at"]
@@ -443,7 +446,7 @@ async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) 
     def _run_request():
         genai.configure(api_key=EMERGENT_LLM_KEY)
         model = genai.GenerativeModel(
-            model_name="gemini-3.5-flash",
+            model_name="gemini-3.5-flash",  # <--- Ostré SDK s novým gemini-3.5 Modelem
             system_instruction=system
         )
         response = model.generate_content(prompt)
@@ -490,7 +493,7 @@ class EnhanceIn(BaseModel):
 @api.post("/ai/enhance-description")
 async def ai_enhance(payload: EnhanceIn, user: dict = Depends(get_current_user)):
     sys = (
-        "Jsi profesionální český řemeslník a copywriter. Přepiš vstup do jasného, "
+        "Jsi profesionální český řemeslník and copywriter. Přepiš vstup do jasného, "
         "profesionálního a strukturovaného popisu rozsahu zakázky pro klienta. "
         "Použij krátké odstavce a odrážky. Maximálně 200 slov. Pouze česky."
     )
@@ -581,7 +584,7 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
         f"Vstupní podklad — kalkulovaná základní cena: {int(base)} Kč "
         f"(práce {int(payload.cena_prace)} + materiál {int(payload.cena_material)} + doprava {int(payload.cena_doprava)})\n"
         f"Popis: {payload.description}\n\n"
-        f"Tři varianty mají tyto pevné ceny (Kč):\n"
+        f"Tři varianty majíshift tyhle pevné ceny (Kč):\n"
         f"  A Základní: {int(A)}\n"
         f"  B Zlatá střední cesta: {int(B)} (+{diff_b_pct} % oproti A)\n"
         f"  C Premium: {int(C)} (+{diff_c_pct} % oproti B)\n\n"
@@ -601,7 +604,7 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
             raise ValueError("AI nevrátila 3 varianty")
 
         prices = [A, B, C]
-        defaults_nazev = ["🥉 Základní", "🥇 Zlatá střední cesta", "💎 Premium"]
+        defaults_nazev = ["Základní", "Zlatá střední cesta", "Premium"]
         variants = []
         for i, v in enumerate(variants_raw[:3]):
             if not isinstance(v, dict):
@@ -673,10 +676,10 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     from reportlab.pdfbase.ttfonts import TTFont
 
     try:
-        pdfmetrics.registerFont(TTFont("Roboto", str(ROOT_DIR / "fonts" / "Roboto-Regular.ttf")))
-        pdfmetrics.registerFont(TTFont("Roboto-Bold", str(ROOT_DIR / "fonts" / "Roboto-Bold.ttf")))
-        font_name = "Roboto"
-        font_bold = "Roboto-Bold"
+        pdfmetrics.registerFont(TTFont("DejaVu", str(ROOT_DIR / "fonts" / "DejaVuSans.ttf")))
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(ROOT_DIR / "fonts" / "DejaVuSans-Bold.ttf")))
+        font_name = "DejaVu"
+        font_bold = "DejaVu-Bold"
     except Exception:
         font_name = "Helvetica"
         font_bold = "Helvetica-Bold"
@@ -684,10 +687,10 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
     styles = getSampleStyleSheet()
-    h1 = ParagraphStyle("h1", parent=styles["Heading1"], fontName=font_bold, fontSize=20, textColor=colors.HexColor("#2d2926"))
-    h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontName=font_bold, fontSize=13, textColor=colors.HexColor("#c9820a"), spaceBefore=10)
-    body = ParagraphStyle("body", parent=styles["BodyText"], fontName=font_name, fontSize=10, textColor=colors.HexColor("#2d2926"), leading=13)
-    small = ParagraphStyle("small", parent=body, fontSize=9, textColor=colors.HexColor("#68635c"))
+    h1 = ParagraphStyle("h1", parent=styles["Heading1"], fontName=font_bold, fontSize=20, textColor=colors.HexColor("#2d2926"), leading=25, spaceAfter=10)
+    h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontName=font_bold, fontSize=13, textColor=colors.HexColor("#c9820a"), leading=17, spaceBefore=10, spaceAfter=6)
+    body = ParagraphStyle("body", parent=styles["BodyText"], fontName=font_name, fontSize=10, textColor=colors.HexColor("#2d2926"), leading=14)
+    small = ParagraphStyle("small", parent=body, fontSize=9, textColor=colors.HexColor("#68635c"), leading=13)
 
     elems = []
     header = Table([[
@@ -793,18 +796,18 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     try:
-        pdfmetrics.registerFont(TTFont("Roboto", str(ROOT_DIR / "fonts" / "Roboto-Regular.ttf")))
-        pdfmetrics.registerFont(TTFont("Roboto-Bold", str(ROOT_DIR / "fonts" / "Roboto-Bold.ttf")))
-        fn, fb = "Roboto", "Roboto-Bold"
+        pdfmetrics.registerFont(TTFont("DejaVu", str(ROOT_DIR / "fonts" / "DejaVuSans.ttf")))
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(ROOT_DIR / "fonts" / "DejaVuSans-Bold.ttf")))
+        fn, fb = "DejaVu", "DejaVu-Bold"
     except Exception:
         fn, fb = "Helvetica", "Helvetica-Bold"
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
-    h1 = ParagraphStyle("h1", fontName=fb, fontSize=20, textColor=colors.HexColor("#2d2926"))
-    h2 = ParagraphStyle("h2", fontName=fb, fontSize=13, textColor=colors.HexColor("#c9820a"), spaceBefore=10)
-    body = ParagraphStyle("body", fontName=fn, fontSize=10, textColor=colors.HexColor("#2d2926"), leading=13)
-    small = ParagraphStyle("small", fontName=fn, fontSize=9, textColor=colors.HexColor("#68635c"))
+    h1 = ParagraphStyle("h1", fontName=fb, fontSize=20, textColor=colors.HexColor("#2d2926"), leading=25, spaceAfter=10)
+    h2 = ParagraphStyle("h2", fontName=fb, fontSize=13, textColor=colors.HexColor("#c9820a"), leading=17, spaceBefore=10, spaceAfter=6)
+    body = ParagraphStyle("body", fontName=fn, fontSize=10, textColor=colors.HexColor("#2d2926"), leading=14)
+    small = ParagraphStyle("small", fontName=fn, fontSize=9, textColor=colors.HexColor("#68635c"), leading=13)
 
     elems = []
     elems.append(Paragraph(f"<b>Celkové vyúčtování — zakázka č. {job['job_number']}</b>", h1))
@@ -906,52 +909,66 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     try:
-        pdfmetrics.registerFont(TTFont("Roboto", str(ROOT_DIR / "fonts" / "Roboto-Regular.ttf")))
-        pdfmetrics.registerFont(TTFont("Roboto-Bold", str(ROOT_DIR / "fonts" / "Roboto-Bold.ttf")))
-        fn, fb = "Roboto", "Roboto-Bold"
+        pdfmetrics.registerFont(TTFont("DejaVu", str(ROOT_DIR / "fonts" / "DejaVuSans.ttf")))
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(ROOT_DIR / "fonts" / "DejaVuSans-Bold.ttf")))
+        fn, fb = "DejaVu", "DejaVu-Bold"
     except Exception:
         fn, fb = "Helvetica", "Helvetica-Bold"
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
-    h1 = ParagraphStyle("h1", fontName=fb, fontSize=18, textColor=colors.HexColor("#2d2926"))
-    h2 = ParagraphStyle("h2", fontName=fb, fontSize=12, textColor=colors.HexColor("#c9820a"))
-    body = ParagraphStyle("body", fontName=fn, fontSize=9, textColor=colors.HexColor("#2d2926"), leading=12)
-    small = ParagraphStyle("small", fontName=fn, fontSize=8, textColor=colors.HexColor("#68635c"))
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
+    
+    # OPRAVA PŘEKRÝVÁNÍ TEXTŮ: Zavedení přesné výšky řádků (leading) odpovídající velikosti fontu
+    h1 = ParagraphStyle("h1", fontName=fb, fontSize=22, textColor=colors.HexColor("#2d2926"), leading=26, spaceAfter=4)
+    h2 = ParagraphStyle("h2", fontName=fb, fontSize=14, textColor=colors.HexColor("#c9820a"), leading=18, spaceBefore=12, spaceAfter=4)
+    body = ParagraphStyle("body", fontName=fn, fontSize=10, textColor=colors.HexColor("#2d2926"), leading=14, spaceAfter=2)
+    small = ParagraphStyle("small", fontName=fn, fontSize=9, textColor=colors.HexColor("#68635c"), leading=13)
 
     elems = []
     elems.append(Paragraph(f"<b>Tři varianty nabídky</b>", h1))
-    elems.append(Paragraph(input_data.get("title", ""), small))
-    elems.append(Paragraph(f"Klient: {input_data.get('client','')} | {input_data.get('address','')}", small))
-    elems.append(Spacer(1, 6))
+    elems.append(Paragraph(f"Projekt: {input_data.get('title', '')}", small))
+    if input_data.get('client') or input_data.get('address'):
+        elems.append(Paragraph(f"Klient: {input_data.get('client','')} | Místo: {input_data.get('address','')}", small))
+    elems.append(Spacer(1, 8))
 
     icons = ["🥉", "🥇", "💎"]
     for i, v in enumerate(variants[:3]):
         icon = icons[i] if i < len(icons) else ""
-        title_line = f"<b>{icon} {v.get('nazev','')}</b>"
-        price_line = f"<b>{_czech_currency(safe_float(v.get('cena_kc', 0)))}</b>"
-        elems.append(Paragraph(title_line, h2))
-        elems.append(Paragraph(price_line, h1))
-        elems.append(Paragraph(v.get("popis", ""), body))
-        elems.append(Spacer(1, 3))
-        elems.append(Paragraph(f"<b>Záruka:</b> {v.get('zaruka','')} &nbsp;&nbsp; <b>Termín:</b> {v.get('termin','')}", body))
-        elems.append(Paragraph("<b>Rozsah:</b>", body))
-        elems.append(Paragraph(v.get("rozsah", "").replace("\n", "<br/>"), body))
+        
+        # Nadpis varianty s dostatečným řádkováním
+        elems.append(Paragraph(f"<b>{icon} {v.get('nazev','')}</b>", h2))
+        
+        # Velká cena s vlastním leadingem, aby se nelepila na popis pod sebou
+        elems.append(Paragraph(f"<b>{_czech_currency(safe_float(v.get('cena_kc', 0)))}</b>", h1))
+        
+        # Krátký popis z AI
+        if v.get("popis"):
+            elems.append(Paragraph(v.get("popis", ""), body))
+            
+        elems.append(Paragraph(f"<b>Záruka:</b> {v.get('zaruka','')} &nbsp;&nbsp;|&nbsp;&nbsp; <b>Termín realizace:</b> {v.get('termin','')}", body))
+        
+        # Výpis odrážek rozsahu
+        if v.get("rozsah"):
+            elems.append(Paragraph("<b>Rozsah prací:</b>", body))
+            elems.append(Paragraph(v.get("rozsah", "").replace("\n", "<br/>"), body))
+            
         included = v.get("included") or []
         if included:
-            elems.append(Paragraph("<b>Zahrnuto:</b>", body))
+            elems.append(Paragraph("<b>Co je v ceně zahrnuto:</b>", body))
             for it in included:
                 elems.append(Paragraph(f"✓ {it}", body))
+                
         excluded = v.get("excluded") or []
         if excluded:
-            elems.append(Paragraph("<b>Není zahrnuto:</b>", body))
+            elems.append(Paragraph("<b>Co v ceně ZAHRNUTO NENÍ:</b>", body))
             for it in excluded:
                 elems.append(Paragraph(f"✗ {it}", body))
-        elems.append(Spacer(1, 8))
+                
+        elems.append(Spacer(1, 10))
 
-    elems.append(Spacer(1, 6))
-    elems.append(Paragraph(f"Vystavil: {user.get('company') or user.get('name','')} | {user.get('phone','')} | {user.get('email','')}", small))
     elems.append(Spacer(1, 10))
+    elems.append(Paragraph(f"Vystavil: {user.get('company') or user.get('name','')} | Kontakty: {user.get('phone','')} | {user.get('email','')}", small))
+    elems.append(Spacer(1, 6))
     elems.append(Paragraph("<font color='#9ca3af'>Vytvořil © James P. Jones 2026</font>", small))
     doc.build(elems)
     return buf.getvalue()
@@ -1176,7 +1193,7 @@ async def assign_employees(job_id: str, payload: AssignIn, user: dict = Depends(
     fresh = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     return serialize_job(fresh)
 
-# ---------- Employee read-only views ----------
+# ---------- Employee views ----------
 def _strip_prices(rows):
     out = []
     for r in rows or []:
@@ -1371,7 +1388,7 @@ async def resolve_proposal(job_id: str, proposal_id: str, payload: ResolvePropos
     return serialize_job(fresh)
 
 # ---------- Health ----------
-@app.get("/")  # OPRAVENO: Navázáno přímo na kořen celého webu pro bezchybný Railway Health Check!
+@api.get("/")
 async def root():
     return {"app": "Remeslnik Pro 1.0", "status": "ok"}
 
@@ -1398,9 +1415,8 @@ async def startup():
         idx_info = await db.employees.index_information()
         if "pin_1" in idx_info:
             await db.employees.drop_index("pin_1")
-            logger.info("Dropped legacy global-unique pin_1 index")
     except Exception as e:
-        logger.warning("Could not inspect/drop pin_1 index: %s", e)
+        logger.warning("Could not drop pin_1 index: %s", e)
     await db.employees.create_index([("owner_user_id", 1), ("pin", 1)], unique=True, sparse=True)
     await db.users.create_index("company_code", unique=True, sparse=True)
 
@@ -1430,7 +1446,7 @@ async def startup():
             "id": str(uuid.uuid4()),
             "email": admin_email,
             "password_hash": hash_password(admin_pass),
-            "name": "Admin Řemeslník",
+            "name": "Admin?",
             "company": "Řemeslník Pro s.r.o.",
             "phone": "+420 777 123 456",
             "company_code": code,
@@ -1438,14 +1454,6 @@ async def startup():
         })
     elif not verify_password(admin_pass, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pass)}})
-
-    try:
-        await db.jobs.update_many(
-            {"payment_note": "Splatnost 14 dní od vystavení faktury."},
-            {"$set": {"payment_note": ""}},
-        )
-    except Exception:
-        pass
 
 @app.on_event("shutdown")
 async def shutdown():
