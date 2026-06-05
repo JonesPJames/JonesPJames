@@ -18,7 +18,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Respons
 from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, field_validator
 
 
 # ---------- Config ----------
@@ -83,6 +83,37 @@ def public_user(u: dict) -> dict:
         "phone": u.get("phone", ""),
         "company_code": u.get("company_code", ""),
     }
+
+def clean_comma_float(v):
+    if isinstance(v, str):
+        v = v.replace(",", ".").replace(" ", "").strip()
+    return v
+
+def safe_float(v, default=0.0) -> float:
+    if v is None:
+        return default
+    try:
+        return float(str(v).replace(",", ".").replace(" ", "").strip())
+    except Exception:
+        return default
+
+def _ensure_fonts():
+    import urllib.request
+    font_dir = ROOT_DIR / "fonts"
+    font_dir.mkdir(exist_ok=True)
+    urls = {
+        "DejaVuSans.ttf": "https://github.com/aaronshaf/dejavu-sans-ttf/raw/master/ttf/DejaVuSans.ttf",
+        "DejaVuSans-Bold.ttf": "https://github.com/aaronshaf/dejavu-sans-ttf/raw/master/ttf/DejaVuSans-Bold.ttf"
+    }
+    for name, url in urls.items():
+        p = font_dir / name
+        if not p.exists():
+            try:
+                logger.info(f"Stahuji nezbytný český font {name} pro PDF...")
+                urllib.request.urlretrieve(url, p)
+                logger.info(f"Font {name} byl úspěšně stažen.")
+            except Exception as e:
+                logger.error(f"Selhalo stahování fontu {name}: {e}")
 
 # Easily-readable code generator (avoids confusing chars 0/O, 1/I/L)
 _CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -157,6 +188,11 @@ class LineItem(BaseModel):
     jednotka: str = "ks"
     cena: float = 0  # Cena/jedn.
 
+    @field_validator("mnozstvi", "cena", mode="before")
+    @classmethod
+    def parse_floats(cls, v):
+        return clean_comma_float(v)
+
 class JobBase(BaseModel):
     client_name: str = ""
     address: str = ""
@@ -213,7 +249,7 @@ async def next_job_number(user_id: str) -> str:
 
 def compute_totals(job: dict) -> dict:
     def sum_lines(lines):
-        return sum((it.get("mnozstvi") or 0) * (it.get("cena") or 0) for it in (lines or []))
+        return sum((safe_float(it.get("mnozstvi")) or 0) * (safe_float(it.get("cena")) or 0) for it in (lines or []))
     work = sum_lines(job.get("prace"))
     mat = sum_lines(job.get("material"))
     trans = sum_lines(job.get("doprava"))
@@ -403,27 +439,19 @@ async def delete_job(job_id: str, user: dict = Depends(get_current_user)):
 # ---------- AI ----------
 async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) -> str:
     import asyncio
-    import urllib.request
-    import json
+    import google.generativeai as genai
 
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="V nastavení chybí API klíč pro Gemini (EMERGENT_LLM_KEY)")
 
     def _run_request():
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={EMERGENT_LLM_KEY}"
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "systemInstruction": {"parts": [{"text": system}]}
-        }
-        req = urllib.request.Request(
-            url, 
-            data=json.dumps(payload).encode("utf-8"), 
-            headers={"Content-Type": "application/json"}, 
-            method="POST"
+        genai.configure(api_key=EMERGENT_LLM_KEY)
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=system
         )
-        with urllib.request.urlopen(req, timeout=15) as response:
-            res = json.loads(response.read().decode("utf-8"))
-            return res["candidates"][0]["content"]["parts"][0]["text"]
+        response = model.generate_content(prompt)
+        return response.text
 
     try:
         return await asyncio.to_thread(_run_request)
@@ -452,7 +480,7 @@ async def ai_material_price(payload: MaterialPriceIn, user: dict = Depends(get_c
         if len(parts) >= 3:
             return {
                 "jednotka": parts[0].strip(),
-                "cena": float(parts[1].strip().replace(",", ".").replace("Kč", "").strip()),
+                "cena": safe_float(parts[1]),
                 "poznamka": parts[2].strip(),
             }
         return {"jednotka": "ks", "cena": 0, "poznamka": out}
@@ -488,6 +516,11 @@ class GenerateVariantsIn(BaseModel):
     narocnost: Literal["nizka", "stredni", "vysoka"] = "stredni"
     urgence: Literal["bezna", "zvysena", "expresni"] = "bezna"
     typ_klienta: Literal["bezny", "firemni", "vip"] = "bezny"
+
+    @field_validator("cena_material", "cena_prace", "cena_doprava", mode="before")
+    @classmethod
+    def parse_floats(cls, v):
+        return clean_comma_float(v)
 
 @api.post("/ai/generate-variants")
 async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends(get_current_user)):
@@ -644,8 +677,8 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     from reportlab.pdfbase.ttfonts import TTFont
 
     try:
-        pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
-        pdfmetrics.registerFont(TTFont("DejaVu-Bold", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+        pdfmetrics.registerFont(TTFont("DejaVu", str(ROOT_DIR / "fonts" / "DejaVuSans.ttf")))
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(ROOT_DIR / "fonts" / "DejaVuSans-Bold.ttf")))
         font_name = "DejaVu"
         font_bold = "DejaVu-Bold"
     except Exception:
@@ -693,14 +726,14 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         data = [["#", "Popis", "Množství", "Jedn.", "Cena/jedn.", "Celkem"]]
         total = 0.0
         for i, it in enumerate(lines, 1):
-            row_total = (it.get("mnozstvi") or 0) * (it.get("cena") or 0)
+            row_total = (safe_float(it.get("mnozstvi")) or 0) * (safe_float(it.get("cena")) or 0)
             total += row_total
             data.append([
                 str(i),
                 Paragraph(it.get("popis", ""), body),
                 f"{it.get('mnozstvi', 0)}",
                 it.get("jednotka", ""),
-                _czech_currency(it.get("cena", 0)),
+                _czech_currency(safe_float(it.get("cena", 0))),
                 _czech_currency(row_total),
             ])
         data.append(["", "", "", "", "Mezisoučet:", _czech_currency(total)])
@@ -764,8 +797,8 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     try:
-        pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
-        pdfmetrics.registerFont(TTFont("DejaVu-Bold", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+        pdfmetrics.registerFont(TTFont("DejaVu", str(ROOT_DIR / "fonts" / "DejaVuSans.ttf")))
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(ROOT_DIR / "fonts" / "DejaVuSans-Bold.ttf")))
         fn, fb = "DejaVu", "DejaVu-Bold"
     except Exception:
         fn, fb = "Helvetica", "Helvetica-Bold"
@@ -797,9 +830,9 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
         data = [["#", "Popis", "Mn.", "Jedn.", "Cena/jedn.", "Celkem"]]
         total = 0.0
         for i, it in enumerate(lines, 1):
-            rt = (it.get("mnozstvi") or 0) * (it.get("cena") or 0)
+            rt = (safe_float(it.get("mnozstvi")) or 0) * (safe_float(it.get("cena")) or 0)
             total += rt
-            data.append([str(i), Paragraph(it.get("popis", ""), body), f"{it.get('mnozstvi', 0)}", it.get("jednotka",""), _czech_currency(it.get("cena", 0)), _czech_currency(rt)])
+            data.append([str(i), Paragraph(it.get("popis", ""), body), f"{it.get('mnozstvi', 0)}", it.get("jednotka",""), _czech_currency(safe_float(it.get("cena", 0))), _czech_currency(rt)])
         data.append(["", "", "", "", "Mezisoučet:", _czech_currency(total)])
         tbl = Table(data, colWidths=[10*mm, 80*mm, 20*mm, 15*mm, 25*mm, 30*mm], repeatRows=1)
         tbl.setStyle(TableStyle([
@@ -879,8 +912,8 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     try:
-        pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
-        pdfmetrics.registerFont(TTFont("DejaVu-Bold", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+        pdfmetrics.registerFont(TTFont("DejaVu", str(ROOT_DIR / "fonts" / "DejaVuSans.ttf")))
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", str(ROOT_DIR / "fonts" / "DejaVuSans-Bold.ttf")))
         fn, fb = "DejaVu", "DejaVu-Bold"
     except Exception:
         fn, fb = "Helvetica", "Helvetica-Bold"
@@ -902,7 +935,7 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
     for i, v in enumerate(variants[:3]):
         icon = icons[i] if i < len(icons) else ""
         title_line = f"<b>{icon} {v.get('nazev','')}</b>"
-        price_line = f"<b>{_czech_currency(v.get('cena_kc', 0))}</b>"
+        price_line = f"<b>{_czech_currency(safe_float(v.get('cena_kc', 0)))}</b>"
         elems.append(Paragraph(title_line, h2))
         elems.append(Paragraph(price_line, h1))
         elems.append(Paragraph(v.get("popis", ""), body))
@@ -973,6 +1006,11 @@ class ImportPayload(BaseModel):
     pracovni_postup: List[dict] = []
     cas_hodiny: Optional[float] = 0
 
+    @field_validator("cas_hodiny", mode="before")
+    @classmethod
+    def parse_floats(cls, v):
+        return clean_comma_float(v)
+
 @api.post("/import/remeslnik-ai")
 async def import_remeslnik(payload: ImportPayload, user: dict = Depends(get_current_user)):
     """Convert imported JSON to job-ready prace[] and material[]."""
@@ -983,18 +1021,18 @@ async def import_remeslnik(payload: ImportPayload, user: dict = Depends(get_curr
         material_lines.append({
             "id": str(uuid.uuid4()),
             "popis": m.get("nazev") or m.get("name") or m.get("popis") or "",
-            "mnozstvi": float(m.get("mnozstvi") or m.get("quantity") or 1),
+            "mnozstvi": safe_float(m.get("mnozstvi") or m.get("quantity"), 1.0),
             "jednotka": m.get("jednotka") or m.get("unit") or "ks",
-            "cena": float(m.get("cena") or m.get("price") or 0),
+            "cena": safe_float(m.get("cena") or m.get("price"), 0.0),
         })
 
     for p in payload.pracovni_postup:
         prace_lines.append({
             "id": str(uuid.uuid4()),
             "popis": p.get("krok") or p.get("popis") or p.get("name") or "",
-            "mnozstvi": float(p.get("hodiny") or p.get("mnozstvi") or 1),
+            "mnozstvi": safe_float(p.get("hodiny") or p.get("mnozstvi"), 1.0),
             "jednotka": p.get("jednotka") or "h",
-            "cena": float(p.get("cena_hodina") or p.get("cena") or 0),
+            "cena": safe_float(p.get("cena_hodina") or p.get("cena"), 0.0),
         })
 
     return {
@@ -1224,6 +1262,11 @@ class ProposalIn(BaseModel):
     jednotka: str = "ks"
     note: str = ""
 
+    @field_validator("mnozstvi", mode="before")
+    @classmethod
+    def parse_floats(cls, v):
+        return clean_comma_float(v)
+
 @api.post("/employee/jobs/{job_id}/propose-vicepracovne")
 async def employee_propose(job_id: str, payload: ProposalIn, actor: dict = Depends(require_employee)):
     emp = actor["employee"]
@@ -1303,6 +1346,11 @@ class ResolveProposalIn(BaseModel):
     action: Literal["approve", "reject"]
     cena: Optional[float] = 0
 
+    @field_validator("cena", mode="before")
+    @classmethod
+    def parse_floats(cls, v):
+        return clean_comma_float(v)
+
 @api.post("/jobs/{job_id}/proposals/{proposal_id}/resolve")
 async def resolve_proposal(job_id: str, proposal_id: str, payload: ResolveProposalIn, user: dict = Depends(get_current_user)):
     job = await db.jobs.find_one({"id": job_id, "user_id": user["id"]}, {"_id": 0})
@@ -1348,6 +1396,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
+    _ensure_fonts()  # Automatické stažení českých písem při startu cloudu
     await db.users.create_index("email", unique=True)
     await db.jobs.create_index([("user_id", 1), ("created_at", -1)])
     await db.jobs.create_index("id", unique=True)
