@@ -442,7 +442,7 @@ async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) 
     def _run_request():
         genai.configure(api_key=EMERGENT_LLM_KEY)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-2.0-flash",
             system_instruction=system
         )
         response = model.generate_content(prompt)
