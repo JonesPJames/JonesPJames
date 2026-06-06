@@ -24,24 +24,23 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#000"
-        }
+        "expo-router",
+        [
+          "expo-splash-screen",
+          {
+            "image": "./assets/images/splash-icon.png",
+            "imageWidth": 200,
+            "resizeMode": "contain",
+            "backgroundColor": "#000"
+          }
+        ],
+        "expo-web-browser"
       ],
-      "expo-web-browser"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    },
-    "extra": {
-    "EXPO_PUBLIC_BACKEND_URL": "https://jonespjames-production.up.railway.app"
-    }
+      "experiments": {
+        "typedRoutes": true
+      },
+      "extra": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://jonespjames-production.up.railway.app"
+      }
     }
   }
-}
