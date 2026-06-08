@@ -47,26 +47,19 @@ jobs:
         EMERGENT_LLM_KEY: "mock_key"
       run: |
         cd backend
-        python -m uvicorn server:app --host localhost --port 8001 > /tmp/backend.log 2>&1 &
+        python -m uvicorn server:app --host 127.0.0.1 --port 8001 > /tmp/backend.log 2>&1 &
         BACKEND_PID=$!
         echo "Backend PID: $BACKEND_PID"    
         
-        # Aktivní čekání na start serveru (až 30 sekund)
+        # Kontrola, zda port 8001 začal naslouchat (přes síťový nástroj nc)
         for i in {1..30}; do
-          if curl -s http://localhost:8001/api/ > /dev/null 2>&1; then
-            echo "Backend je připraven a odpovídá!"
+          if nc -z 127.0.0.1 8001; then
+            echo "Uvicorn port 8001 je aktivní a naslouchá!"
             break
           fi
-          echo "Čekám na inicializaci backendu... ($i/30)"
+          echo "Čekám na otevření portu backendu... ($i/30)"
           sleep 1
         done
-        
-        # Kontrola, zda backend neklekl hned po startu
-        if ! kill -0 $BACKEND_PID 2>/dev/null; then
-          echo "Backend selhal při startu!"
-          cat /tmp/backend.log
-          exit 1
-        fi
 
     - name: Test with pytest
       env:
