@@ -12,12 +12,18 @@ from pathlib import Path
 
 # Read backend URL from frontend .env
 def get_base_url() -> str:
+    from pathlib import Path
     env_path = Path("/app/frontend/.env")
     base = None
-    for line in env_path.read_text().splitlines():
-        if line.startswith("EXPO_PUBLIC_BACKEND_URL"):
-            base = line.split("=", 1)[1].strip().strip('"').strip("'")
-            break
+    
+    # Zkontrolujeme, zda .env vůbec existuje, než ho zkusíme přečíst
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            if line.startswith("EXPO_PUBLIC_BACKEND_URL"):
+                base = line.split("=", 1)[1].strip().strip('"').strip("'")
+                break
+    
+    # Pokud soubor neexistuje, nespadneme, ale skočíme na localhost
     if not base:
         base = "http://localhost:8001"
     return base.rstrip("/") + "/api"
