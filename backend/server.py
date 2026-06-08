@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr, field_validator
-
+from reportlab.lib.utils import ImageReader
 
 # ---------- Config ----------
 JWT_ALGORITHM = "HS256"
@@ -82,6 +82,11 @@ def public_user(u: dict) -> dict:
         "company": u.get("company", ""),
         "phone": u.get("phone", ""),
         "company_code": u.get("company_code", ""),
+        "ico": u.get("ico", ""),
+        "dic": u.get("dic", ""),
+        "show_ico": u.get("show_ico", False),
+        "show_dic": u.get("show_dic", False),
+        "logo_path": u.get("logo_path", ""),
     }
 
 def clean_comma_float(v):
@@ -158,6 +163,8 @@ class RegisterIn(BaseModel):
     name: str
     company: str = ""
     phone: str = ""
+    ico: Optional[str] = ""
+    dic: Optional[str] = ""
 
 class LoginIn(BaseModel):
     email: EmailStr
@@ -299,6 +306,11 @@ async def register(payload: RegisterIn, response: Response):
         "company": payload.company or "",
         "phone": payload.phone or "",
         "company_code": code,
+        "ico": payload.ico or "",
+        "dic": payload.dic or "",
+        "show_ico": False,
+        "show_dic": False,
+        "logo_path": "",
         "created_at": now_utc(),
     }
     await db.users.insert_one(user_doc)
@@ -320,7 +332,8 @@ async def me(user: dict = Depends(get_current_user)):
 
 @api.put("/auth/me")
 async def update_me(payload: dict, user: dict = Depends(get_current_user)):
-    allowed = {k: v for k, v in payload.items() if k in ("name", "company", "phone")}
+    allowed_fields = ("name", "company", "phone", "ico", "dic", "show_ico", "show_dic", "logo_path")
+    allowed = {k: v for k, v in payload.items() if k in allowed_fields}
     if allowed:
         await db.users.update_one({"id": user["id"]}, {"$set": allowed})
     fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
@@ -552,7 +565,7 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
 
     sys = (
         "Jsi expert na cenotvorbu a tvorbu nabídek pro české řemeslné firmy. "
-        "Vytvoř TŘI varianty nabídky ve formátu JSON pole se 3 prvky a NIC JINÉHO. "
+        "Vytvoř TŘI varianty nabídky ve formátu JSON pole se 3 prvky and NIC JINÉHO. "
         "Klíče v každém prvku: nazev, rozsah (string s odrážkami oddělenými novým řádkem), "
         "zaruka (string, např. '24 měsíců'), termin (string, např. '4-6 týdnů'), "
         "included (pole 4-6 stringů), excluded (pole 2-4 stringů), popis (1-2 věty co odlišuje variantu). "
@@ -656,6 +669,22 @@ def _czech_currency(n: float) -> str:
 def _czech_date(dt: datetime) -> str:
     return f"{dt.day}. {dt.month}. {dt.year}"
 
+def _draw_header_info(canvas, doc, user):
+    from reportlab.lib.units import mm
+    if user.get('logo_path'):
+        try:
+            logo = ImageReader(user['logo_path'])
+            canvas.drawImage(logo, 15*mm, 780, width=40*mm, height=20*mm, preserveAspectRatio=True)
+        except:
+            pass
+    y = 780
+    canvas.setFont("Helvetica", 9)
+    if user.get('show_ico') and user.get('ico'):
+        canvas.drawString(130*mm, y, f"IČO: {user['ico']}")
+        y -= 10
+    if user.get('show_dic') and user.get('dic'):
+        canvas.drawString(130*mm, y, f"DIČ: {user['dic']}")
+
 def _build_pdf_quote(job: dict, user: dict) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
@@ -675,14 +704,15 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         font_bold = "Helvetica-Bold"
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
+    def add_header(canvas, doc): _draw_header_info(canvas, doc, user)
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm, onFirstPage=add_header)
     styles = getSampleStyleSheet()
     h1 = ParagraphStyle("h1", parent=styles["Heading1"], fontName=font_bold, fontSize=20, textColor=colors.HexColor("#2d2926"), leading=25, spaceAfter=10)
     h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontName=font_bold, fontSize=13, textColor=colors.HexColor("#c9820a"), leading=17, spaceBefore=10, spaceAfter=6)
     body = ParagraphStyle("body", parent=styles["BodyText"], fontName=font_name, fontSize=10, textColor=colors.HexColor("#2d2926"), leading=14)
     small = ParagraphStyle("small", parent=body, fontSize=9, textColor=colors.HexColor("#68635c"), leading=13)
 
-    elems = []
+    elems = [Spacer(1, 40)]
     header = Table([[
         Paragraph(f"<b>Cenová nabídka č. {job['job_number']}</b>", h1),
         Paragraph(f"<b>{user.get('company') or user.get('name','')}</b><br/>{user.get('name','')}<br/>Tel: {user.get('phone','')}<br/>{user.get('email','')}", small),
@@ -747,8 +777,6 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     trans = section("Doprava, závoz a manipulace", job.get("doprava", []))
 
     elems.append(Spacer(1, 8))
-    
-    # Načtení vypočtené nebo editované zálohy z totals
     totals = job.get("totals", {})
     zaloha_k_uhrade = totals.get("zaloha", (mat + trans) + (0.3 * work))
 
@@ -780,7 +808,7 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         elems.append(Spacer(1, 4))
     elems.append(Paragraph("Nabídka platí 30 dní od data vystavení.", small))
     elems.append(Spacer(1, 14))
-    elems.append(Paragraph("<font color='#9ca3af'>Vytvořil © James P. Jones 2026</font>", small))
+    elems.append(Paragraph("<font color='#9ca3af'>Vytvořeno Řemeslník Pro ™</font>", small))
 
     doc.build(elems)
     return buf.getvalue()
@@ -801,13 +829,14 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
         fn, fb = "Helvetica", "Helvetica-Bold"
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
+    def add_header(canvas, doc): _draw_header_info(canvas, doc, user)
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm, onFirstPage=add_header)
     h1 = ParagraphStyle("h1", fontName=fb, fontSize=20, textColor=colors.HexColor("#2d2926"), leading=25, spaceAfter=10)
     h2 = ParagraphStyle("h2", fontName=fb, fontSize=13, textColor=colors.HexColor("#c9820a"), leading=17, spaceBefore=10, spaceAfter=6)
     body = ParagraphStyle("body", fontName=fn, fontSize=10, textColor=colors.HexColor("#2d2926"), leading=14)
     small = ParagraphStyle("small", fontName=fn, fontSize=9, textColor=colors.HexColor("#68635c"), leading=13)
 
-    elems = []
+    elems = [Spacer(1, 40)]
     elems.append(Paragraph(f"<b>Celkové vyúčtování — zakázka č. {job['job_number']}</b>", h1))
     elems.append(Spacer(1, 6))
     info = [
@@ -893,7 +922,7 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     if job.get("payment_note"):
         elems.append(Paragraph(job["payment_note"], small))
     elems.append(Spacer(1, 14))
-    elems.append(Paragraph("<font color='#9ca3af'>Vytvořil © James P. Jones 2026</font>", small))
+    elems.append(Paragraph("<font color='#9ca3af'>Vytvořeno Řemeslník Pro ™</font>", small))
 
     doc.build(elems)
     return buf.getvalue()
@@ -914,14 +943,15 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
         fn, fb = "Helvetica", "Helvetica-Bold"
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
+    def add_header(canvas, doc): _draw_header_info(canvas, doc, user)
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm, onFirstPage=add_header)
     
     h1 = ParagraphStyle("h1", fontName=fb, fontSize=22, textColor=colors.HexColor("#2d2926"), leading=26, spaceAfter=4)
     h2 = ParagraphStyle("h2", fontName=fb, fontSize=14, textColor=colors.HexColor("#c9820a"), leading=18, spaceBefore=12, spaceAfter=4)
     body = ParagraphStyle("body", fontName=fn, fontSize=10, textColor=colors.HexColor("#2d2926"), leading=14, spaceAfter=2)
     small = ParagraphStyle("small", fontName=fn, fontSize=9, textColor=colors.HexColor("#68635c"), leading=13)
 
-    elems = []
+    elems = [Spacer(1, 40)]
     elems.append(Paragraph(f"<b>Tři varianty nabídky</b>", h1))
     elems.append(Paragraph(f"Projekt: {input_data.get('title', '')}", small))
     if input_data.get('client') or input_data.get('address'):
@@ -961,7 +991,7 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
     elems.append(Spacer(1, 10))
     elems.append(Paragraph(f"Vystavil: {user.get('company') or user.get('name','')} | Kontakty: {user.get('phone','')} | {user.get('email','')}", small))
     elems.append(Spacer(1, 6))
-    elems.append(Paragraph("<font color='#9ca3af'>Vytvořil © James P. Jones 2026</font>", small))
+    elems.append(Paragraph("<font color='#9ca3af'>Vytvořeno Řemeslník Pro ™</font>", small))
     doc.build(elems)
     return buf.getvalue()
 
@@ -1003,7 +1033,7 @@ async def get_variants_pdf(bundle_id: str, user: dict = Depends(get_current_user
 
 # ---------- Import ----------
 class ImportPayload(BaseModel):
-    cinnost: Optional[str] = ""
+    sbinost: Optional[str] = ""
     parametry: Optional[str] = ""
     material: List[dict] = []
     pracovni_postup: List[dict] = []
@@ -1038,7 +1068,7 @@ async def import_remeslnik(payload: ImportPayload, user: dict = Depends(get_curr
         })
 
     return {
-        "title": payload.cinnost or "",
+        "title": payload.sbinost or "",
         "description": payload.parametry or "",
         "prace": prace_lines,
         "material": material_lines,
@@ -1397,7 +1427,6 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    # _ensure_fonts()  <-- ZAKOMENTOVÁNO: fonty načítáme stabilně přímo z vašeho git repozitáře
     await db.users.create_index("email", unique=True)
     await db.jobs.create_index([("user_id", 1), ("created_at", -1)])
     await db.jobs.create_index("id", unique=True)
@@ -1442,6 +1471,11 @@ async def startup():
             "company": "Řemeslník Pro s.r.o.",
             "phone": "+420 777 123 456",
             "company_code": code,
+            "ico": "",
+            "dic": "",
+            "show_ico": False,
+            "show_dic": False,
+            "logo_path": "",
             "created_at": now_utc(),
         })
     elif not verify_password(admin_pass, existing["password_hash"]):
