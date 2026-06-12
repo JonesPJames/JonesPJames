@@ -1,22 +1,29 @@
 """Backend tests for Remeslnik Pro 1.0"""
 import os
+import sys
 import time
 import uuid
+from pathlib import Path
 import pytest
 import requests
+
+# Oprava cest: Přidáme složku backend do vyhledávacích cest Pythonu, aby šel naimportovat server.py
+current_dir = Path(__file__).parent
+backend_dir = current_dir.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
 
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://tradesmen-quotes.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@remeslnikpro.cz"
 ADMIN_PASS = "admin123"
+
 # Opičí patch pro vyřazení Google Gemini API během testů v CI/CD (předchází Timeout chybám)
 import server
 async def mock_llm_call(system: str, prompt: str, session_id=None) -> str:
-    # Pokud test zjišťuje cenu materiálu
     if "material-price" in prompt or "Materiál" in prompt:
         return "m2|350|Standardní testovací cena za dlažbu"
-    # Pokud test generuje varianty zakázky
     return "Profesionální strukturovaný popis zakázky generovaný z testovacího prostředí."
 server._llm_call = mock_llm_call
 
@@ -262,3 +269,4 @@ class TestImport:
         assert d["title"] == "Pokládka dlažby"
         assert len(d["material"]) == 1 and d["material"][0]["popis"] == "Dlažba"
         assert len(d["prace"]) == 1 and d["prace"][0]["mnozstvi"] == 4
+                          
