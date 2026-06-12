@@ -10,6 +10,15 @@ API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@remeslnikpro.cz"
 ADMIN_PASS = "admin123"
+# Opičí patch pro vyřazení Google Gemini API během testů v CI/CD (předchází Timeout chybám)
+import server
+async def mock_llm_call(system: str, prompt: str, session_id=None) -> str:
+    # Pokud test zjišťuje cenu materiálu
+    if "material-price" in prompt or "Materiál" in prompt:
+        return "m2|350|Standardní testovací cena za dlažbu"
+    # Pokud test generuje varianty zakázky
+    return "Profesionální strukturovaný popis zakázky generovaný z testovacího prostředí."
+server._llm_call = mock_llm_call
 
 @pytest.fixture(scope="module")
 def admin_token():
