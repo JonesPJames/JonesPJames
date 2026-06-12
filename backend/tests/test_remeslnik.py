@@ -11,9 +11,20 @@ API = f"{BASE_URL}/api"
 ADMIN_EMAIL = "admin@remeslnikpro.cz"
 ADMIN_PASS = "admin123"
 
-
 @pytest.fixture(scope="module")
 def admin_token():
+    # 1. Nejdříve zkusíme admina v prázdné testovací databázi zaregistrovat.
+    # Použijeme endpoint /auth/register, který aplikace pro registraci běžně má.
+    try:
+        requests.post(
+            f"{API}/auth/register", 
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASS, "name": "Admin Test"}, 
+            timeout=5
+        )
+    except Exception:
+        pass # Pokud registrace selže (např. už uživatel existuje), jdeme dál na login
+
+    # 2. Tvůj původní kód, který teď už díky registraci projde na čisté databázi
     r = requests.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASS}, timeout=15)
     assert r.status_code == 200, f"login failed: {r.status_code} {r.text}"
     data = r.json()
@@ -24,7 +35,7 @@ def admin_token():
 @pytest.fixture(scope="module")
 def auth_headers(admin_token):
     return {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
-
+    
 
 # -------------------- Auth --------------------
 class TestAuth:
