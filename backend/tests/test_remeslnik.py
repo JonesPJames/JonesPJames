@@ -13,6 +13,9 @@ ADMIN_PASS = "admin123"
 
 @pytest.fixture(scope="module")
 @pytest.fixture(scope="module")
+
+
+@pytest.fixture(scope="module")
 def admin_token():
     # 1. Registrace testovacího admina přesně podle schématu RegisterIn v server.py
     try:
@@ -28,9 +31,9 @@ def admin_token():
             timeout=15
         )
     except Exception:
-        pass # Pokud už uživatel existuje, registrace selže, což ignorujeme a jdeme na login
+        pass 
 
-    # 2. Tvůj původní ověřený login, který teď už najde vytvořeného uživatele
+    # 2. Tvůj původní ověřený login
     r = requests.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASS}, timeout=15)
     assert r.status_code == 200, f"login failed: {r.status_code} {r.text}"
     data = r.json()
