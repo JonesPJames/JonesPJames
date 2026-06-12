@@ -12,10 +12,6 @@ ADMIN_EMAIL = "admin@remeslnikpro.cz"
 ADMIN_PASS = "admin123"
 
 @pytest.fixture(scope="module")
-@pytest.fixture(scope="module")
-
-
-@pytest.fixture(scope="module")
 def admin_token():
     # 1. Registrace testovacího admina přesně podle schématu RegisterIn v server.py
     try:
