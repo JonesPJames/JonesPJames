@@ -24,12 +24,14 @@ export default function Profil() {
   const [name, setName] = useState(user?.name || "");
   const [company, setCompany] = useState(user?.company || "");
   const [phone, setPhone] = useState(user?.phone || "");
+  const [ico, setIco] = useState(user?.ico || "");
+  const [dic, setDic] = useState(user?.dic || "");
   const [busy, setBusy] = useState(false);
 
   async function save() {
     setBusy(true);
     try {
-      await updateProfile({ name, company, phone });
+      await updateProfile({ name, company, phone, ico, dic });
       Alert.alert("Hotovo", "Profil byl aktualizován");
     } catch (e: any) {
       Alert.alert("Chyba", getApiErrorMessage(e));
@@ -60,6 +62,8 @@ export default function Profil() {
             <Field label="Jméno a příjmení" value={name} onChangeText={setName} testID="p-name" />
             <Field label="Název firmy" value={company} onChangeText={setCompany} testID="p-company" />
             <Field label="Telefon" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="p-phone" />
+            <Field label="IČO" value={ico} onChangeText={setIco} keyboardType="number-pad" testID="p-ico" />
+            <Field label="DIČ" value={dic} onChangeText={setDic} testID="p-dic" />
             <PrimaryButton title="Uložit změny" onPress={save} loading={busy} testID="p-save" />
           </View>
           <PrimaryButton variant="ghost" title="Odhlásit se" onPress={onLogout} testID="p-logout" />
