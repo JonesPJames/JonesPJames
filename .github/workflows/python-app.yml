@@ -56,8 +56,9 @@ jobs:
         MONGO_URL: "mongodb://localhost:27017"
         DB_NAME: "remeslnik_test"
         JWT_SECRET: "test_secret_key_12345"
-        EMERGENT_LLM_KEY: "mock_key"
+        EMERGENT_LLM_KEY: ${{ secrets.EMERGENT_LLM_KEY }}  # <--- TADY JE TA ZMĚNA
         EXPO_PUBLIC_BACKEND_URL: "http://127.0.0.1:8001"
+        
       run: |
         cd backend
         python -m uvicorn server:app --host 127.0.0.1 --port 8001 > /tmp/backend.log 2>&1 &
@@ -79,8 +80,9 @@ jobs:
         MONGO_URL: "mongodb://localhost:27017"
         DB_NAME: "remeslnik_test"
         JWT_SECRET: "test_secret_key_12345"
-        EMERGENT_LLM_KEY: "mock_key"
+        EMERGENT_LLM_KEY: ${{ secrets.EMERGENT_LLM_KEY }}  # <--- TADY JE TA ZMĚNA
         EXPO_PUBLIC_BACKEND_URL: "http://127.0.0.1:8001"
+        
       run: |
         cd backend
         pytest
