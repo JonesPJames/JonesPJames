@@ -44,9 +44,14 @@ def auth_headers(admin_token):
 
 # -------------------- Auth --------------------
 class TestAuth:
-    def test_login_admin_success(self):
+        def test_login_admin_success(self):
+        try:
+            requests.post(f"{API}/auth/register", json={"email": ADMIN_EMAIL, "password": ADMIN_PASS, "name": "Admin"}, timeout=5)
+        except Exception:
+            pass
         r = requests.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASS}, timeout=15)
         assert r.status_code == 200
+    
         d = r.json()
         assert d["user"]["email"] == ADMIN_EMAIL
         assert d["token"]
