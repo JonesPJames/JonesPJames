@@ -14,8 +14,19 @@ permissions:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+
+    # Tady startujeme dočasnou MongoDB databázi pro testy
+    services:
+      mongodb:
+        image: mongo:latest
+        options: >-
+          --health-cmd mongosh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 27017:27017
 
     steps:
     - uses: actions/checkout@v4
@@ -29,7 +40,8 @@ jobs:
       working-directory: backend
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest uvicorn motor pydantic email-validator bcrypt pyjwt reportlab requests dotenv
+        # Opraveno dotenv na python-dotenv
+        pip install flake8 pytest uvicorn motor pydantic email-validator bcrypt pyjwt reportlab requests python-dotenv
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         
     - name: Lint with flake8
@@ -45,15 +57,16 @@ jobs:
         DB_NAME: "remeslnik_test"
         JWT_SECRET: "test_secret_key_12345"
         EMERGENT_LLM_KEY: "mock_key"
+        EXPO_PUBLIC_BACKEND_URL: "http://127.0.0.1:8001"
       run: |
         cd backend
         python -m uvicorn server:app --host 127.0.0.1 --port 8001 > /tmp/backend.log 2>&1 &
         BACKEND_PID=$!
         echo "Backend PID: $BACKEND_PID"    
         
-        # Kontrola, zda port 8001 začal naslouchat (přes síťový nástroj nc)
+        # Kontrola zdraví backendu pomocí curl
         for i in {1..30}; do
-          if nc -z 127.0.0.1 8001; then
+          if curl -s http://127.0.0.1:8001/api/health > /dev/null 2>&1; then
             echo "Uvicorn port 8001 je aktivní a naslouchá!"
             break
           fi
@@ -67,6 +80,8 @@ jobs:
         DB_NAME: "remeslnik_test"
         JWT_SECRET: "test_secret_key_12345"
         EMERGENT_LLM_KEY: "mock_key"
+        EXPO_PUBLIC_BACKEND_URL: "http://127.0.0.1:8001"
       run: |
         cd backend
         pytest
+        
