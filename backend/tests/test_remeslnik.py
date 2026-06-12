@@ -44,14 +44,13 @@ def auth_headers(admin_token):
 
 # -------------------- Auth --------------------
 class TestAuth:
-        def test_login_admin_success(self):
+    def test_login_admin_success(self):
         try:
             requests.post(f"{API}/auth/register", json={"email": ADMIN_EMAIL, "password": ADMIN_PASS, "name": "Admin"}, timeout=5)
         except Exception:
             pass
         r = requests.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASS}, timeout=15)
         assert r.status_code == 200
-    
         d = r.json()
         assert d["user"]["email"] == ADMIN_EMAIL
         assert d["token"]
@@ -207,7 +206,7 @@ class TestAI:
         assert isinstance(d["cena"], (int, float))
 
     def test_enhance_description(self, auth_headers):
-        r = requests.post(f"{API}/ai/enhance-description", json={"text": "rekonstrukce koupelny vcetne dlazby a obkladu"},
+        r = requests.post(f"{API}/ai/enhance-description", json={"text": "rekonstrukce koupelny vcetne dlazby and obkladu"},
                           headers=auth_headers, timeout=60)
         assert r.status_code == 200, r.text
         assert len(r.json()["text"]) > 10
