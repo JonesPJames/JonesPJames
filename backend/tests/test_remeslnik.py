@@ -242,7 +242,7 @@ class TestAI:
 class TestImport:
     def test_remeslnik_ai_import(self, auth_headers):
         body = {
-            "cinnost": "Pokládka dlažby",
+            "title": "Pokládka dlažby",
             "parametry": "20 m2 koupelna",
             "material": [{"nazev": "Dlažba", "mnozstvi": 22, "jednotka": "m2", "cena": 350}],
             "pracovni_postup": [{"krok": "Příprava podlahy", "hodiny": 4, "cena_hodina": 400}],
