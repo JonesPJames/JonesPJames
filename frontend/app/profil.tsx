@@ -7,6 +7,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -24,12 +25,24 @@ export default function Profil() {
   const [name, setName] = useState(user?.name || "");
   const [company, setCompany] = useState(user?.company || "");
   const [phone, setPhone] = useState(user?.phone || "");
+  const [ico, setIco] = useState(user?.ico || "");
+  const [dic, setDic] = useState(user?.dic || "");
+  const [showIco, setShowIco] = useState(user?.show_ico ?? false);
+  const [showDic, setShowDic] = useState(user?.show_dic ?? false);
   const [busy, setBusy] = useState(false);
 
   async function save() {
     setBusy(true);
     try {
-      await updateProfile({ name, company, phone });
+      await updateProfile({ 
+        name, 
+        company, 
+        phone, 
+        ico, 
+        dic, 
+        show_ico: showIco, 
+        show_dic: showDic 
+      });
       Alert.alert("Hotovo", "Profil byl aktualizován");
     } catch (e: any) {
       Alert.alert("Chyba", getApiErrorMessage(e));
@@ -60,6 +73,28 @@ export default function Profil() {
             <Field label="Jméno a příjmení" value={name} onChangeText={setName} testID="p-name" />
             <Field label="Název firmy" value={company} onChangeText={setCompany} testID="p-company" />
             <Field label="Telefon" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="p-phone" />
+            
+            <Field label="IČO" value={ico} onChangeText={setIco} keyboardType="number-pad" testID="p-ico" />
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>Zobrazovat IČO na PDF dokumentech</Text>
+              <Switch
+                value={showIco}
+                onValueChange={setShowIco}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+              />
+            </View>
+
+            <Field label="DIČ" value={dic} onChangeText={setDic} testID="p-dic" />
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>Zobrazovat DIČ na PDF dokumentech</Text>
+              <Switch
+                value={showDic}
+                onValueChange={setShowDic}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+              />
+            </View>
+
+            <View style={{ height: 14 }} />
             <PrimaryButton title="Uložit změny" onPress={save} loading={busy} testID="p-save" />
           </View>
           <PrimaryButton variant="ghost" title="Odhlásit se" onPress={onLogout} testID="p-logout" />
@@ -92,4 +127,16 @@ const styles = StyleSheet.create({
   },
   codeStripLabel: { fontSize: 11, color: theme.colors.textMuted, fontWeight: "700", letterSpacing: 1.4 },
   codeStripValue: { fontSize: 22, fontWeight: "900", letterSpacing: 6, color: theme.colors.text, marginTop: 2 },
+  switchRow: {
+    flexDirection: "row",
+    justifyContent: "between",
+    alignItems: "center",
+    marginVertical: 8,
+    paddingHorizontal: 4,
+  },
+  switchLabel: {
+    flex: 1,
+    fontSize: 14,
+    color: theme.colors.text,
+  },
 });

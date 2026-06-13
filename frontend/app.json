@@ -1,20 +1,24 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "Řemeslník Pro",
+    "slug": "remeslnik-pro",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
-    "userInterfaceStyle": "automatic",
+    "scheme": "remeslnikpro",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jpjones.remeslnikpro"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
-      }
+        "backgroundColor": "#121212"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.jpjones.remeslnikpro"
     },
     "web": {
       "bundler": "metro",
@@ -22,22 +26,23 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-        [
-          "expo-splash-screen",
-          {
-            "image": "./assets/images/splash-icon.png",
-            "imageWidth": 200,
-            "resizeMode": "contain",
-            "backgroundColor": "#000000"
-          }
-        ],
-        "expo-web-browser"
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#121212"
+        }
       ],
-      "experiments": {
-        "typedRoutes": true
-      },
-      "extra": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://jonespjames-production.up.railway.app"
-      }
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "EXPO_PUBLIC_BACKEND_URL": "https://jonespjames-production.up.railway.app"
     }
   }
+}
