@@ -3,43 +3,49 @@ import {
   View,
   Text,
   StyleSheet,
+  ScrollView,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
-  TouchableOpacity,
+  Switch,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AppFooter } from "../src/components/AppFooter";
-import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../src/auth";
-import { theme } from "../src/theme";
 import { Field } from "../src/components/Field";
 import { PrimaryButton } from "../src/components/PrimaryButton";
+import { theme } from "../src/theme";
 import { getApiErrorMessage } from "../src/api";
 
 export default function Register() {
   const { register } = useAuth();
   const router = useRouter();
+  
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [ico, setIco] = useState("");
+  const [dic, setDic] = useState("");
+  const [showIco, setShowIco] = useState(false);
+  const [showDic, setShowDic] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
 
-  async function onSubmit() {
-    setError("");
-    if (!name.trim()) return setError("Zadejte jméno");
-    if (!email.trim()) return setError("Zadejte e-mail");
-    if (password.length < 4) return setError("Heslo musí mít alespoň 4 znaky");
+  async function onRegister() {
+    if (!email || !password || !name) {
+      Alert.alert("Chyba", "Jméno, e-mail a heslo jsou povinné údaje.");
+      return;
+    }
     setBusy(true);
     try {
-      await register(email.trim(), password, name.trim(), company.trim(), phone.trim());
+      // Tady to posíláme skrze rozšířené auth.tsx na backend
+      await register(email, password, name, company, phone, ico, dic);
+      // Pokud by se přepínače neuložily při registraci, backend je defaultuje na false,
+      // ale pro jistotu je pak uživatel najde v profilu.
       router.replace("/home");
     } catch (e: any) {
-      setError(getApiErrorMessage(e));
+      Alert.alert("Chyba při registraci", getApiErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -47,91 +53,76 @@ export default function Register() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-      >
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <TouchableOpacity onPress={() => router.back()} style={styles.back} testID="back-btn">
-            <Ionicons name="chevron-back" size={26} color={theme.colors.text} />
-          </TouchableOpacity>
-
-          <View style={styles.brandWrap}>
-            <View style={styles.logo}>
-              <Ionicons name="person-add" size={28} color="#fff" />
-            </View>
-            <Text style={styles.brand}>Vytvořit účet</Text>
-            <Text style={styles.tagline}>Začněte spravovat své zakázky profesionálně</Text>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerStyle={{ padding: 16, justifyContent: "center", flexGrow: 1 }}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Vytvořit účet</Text>
+            <Text style={styles.subtitle}>Začněte spravovat své zakázky profesionálně</Text>
           </View>
 
           <View style={styles.card}>
-            <Field label="Jméno a příjmení" value={name} onChangeText={setName} placeholder="Jan Novák" testID="reg-name" />
-            <Field label="Název firmy" value={company} onChangeText={setCompany} placeholder="Stavby Novák s.r.o." testID="reg-company" />
-            <Field label="Telefon" value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+420 777 123 456" testID="reg-phone" />
-            <Field
-              label="E-mail"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              placeholder="vas@email.cz"
-              testID="reg-email"
-            />
-            <Field label="Heslo" value={password} onChangeText={setPassword} secureTextEntry placeholder="••••••••" testID="reg-password" />
-            {error ? <Text style={styles.err}>{error}</Text> : null}
-            <PrimaryButton
-              title="Zaregistrovat se"
-              onPress={onSubmit}
-              loading={busy}
-              testID="reg-submit"
-            />
-            <View style={{ height: 12 }} />
-            <TouchableOpacity onPress={() => router.replace("/login")} testID="goto-login">
-              <Text style={styles.altText}>
-                Již máte účet?{" "}
-                <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>Přihlásit se</Text>
-              </Text>
-            </TouchableOpacity>
+            <Field label="Jméno a příjmení" value={name} onChangeText={setName} testID="r-name" />
+            <Field label="Název firmy" value={company} onChangeText={setCompany} testID="r-company" />
+            <Field label="Telefon" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="r-phone" />
+            
+            <Field label="IČO" value={ico} onChangeText={setIco} keyboardType="number-pad" testID="r-ico" />
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>Zobrazovat IČO na PDF</Text>
+              <Switch
+                value={showIco}
+                onValueChange={setShowIco}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+              />
+            </View>
+
+            <Field label="DIČ" value={dic} onChangeText={setDic} testID="r-dic" />
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>Zobrazovat DIČ na PDF</Text>
+              <Switch
+                value={showDic}
+                onValueChange={setShowDic}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+              />
+            </View>
+
+            <Field label="E-mail" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" testID="r-email" />
+            <Field label="Heslo" value={password} onChangeText={setPassword} secureTextEntry testID="r-password" />
+            
+            <View style={{ height: 14 }} />
+            <PrimaryButton title="Zaregistrovat se" onPress={onRegister} loading={busy} testID="r-submit" />
           </View>
+
+          <PrimaryButton variant="ghost" title="Již mám účet — Přihlásit se" onPress={() => router.replace("/login")} />
         </ScrollView>
       </KeyboardAvoidingView>
-      <AppFooter />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.bg },
-  container: { padding: 20, paddingBottom: 40 },
-  back: { width: 40, height: 40, justifyContent: "center" },
-  brandWrap: { alignItems: "center", marginTop: 8, marginBottom: 24 },
-  logo: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-    ...theme.shadow.floating,
-  },
-  brand: { fontSize: 24, fontWeight: "800", color: theme.colors.text },
-  tagline: { fontSize: 13, color: theme.colors.textMuted, marginTop: 4, textAlign: "center" },
+  header: { alignItems: "center", marginBottom: 24, marginTop: 20 },
+  title: { fontSize: 28, fontWeight: "900", color: theme.colors.text, textAlign: "center" },
+  subtitle: { fontSize: 15, color: theme.colors.textMuted, textAlign: "center", marginTop: 6, paddingHorizontal: 20 },
   card: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.card,
-    padding: 22,
+    padding: 16,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
-  altText: { textAlign: "center", color: theme.colors.textMuted, fontSize: 14 },
-  err: {
-    color: theme.colors.danger,
+  switchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 6,
+    paddingHorizontal: 4,
+  },
+  switchLabel: {
+    flex: 1,
     fontSize: 13,
-    marginBottom: 10,
-    backgroundColor: "#f9e6e3",
-    padding: 10,
-    borderRadius: 10,
+    color: theme.colors.textMuted,
   },
 });
+
