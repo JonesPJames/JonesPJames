@@ -46,6 +46,7 @@ export const theme = {
       shadowOpacity: 0.04,
       shadowRadius: 4,
       elevation: 1,
+      boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.04)",
     },
     floating: {
       shadowColor: "#000000",
@@ -53,6 +54,7 @@ export const theme = {
       shadowOpacity: 0.18,
       shadowRadius: 12,
       elevation: 4,
+      boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.18)",
     },
   },
   typography: {
