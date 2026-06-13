@@ -220,7 +220,10 @@ class TestAI:
         d = r.json()
         assert "jednotka" in d and "cena" in d and "poznamka" in d
         assert isinstance(d["cena"], (int, float))
-
+    import os
+    @pytest.mark.skipif(not os.environ.get("EMERGENT_LLM_KEY"), reason="Chybí Gemini klíč")
+    def test_enhance_description(self, auth_headers):
+        
     def test_enhance_description(self, auth_headers):
         r = requests.post(f"{API}/ai/enhance-description", json={"text": "rekonstrukce koupelny vcetne dlazby and obkladu"},
                           headers=auth_headers, timeout=60)
