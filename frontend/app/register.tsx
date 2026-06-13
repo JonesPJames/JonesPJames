@@ -39,10 +39,8 @@ export default function Register() {
     }
     setBusy(true);
     try {
-      // Tady to posíláme skrze rozšířené auth.tsx na backend
+      // Tady posíláme komplet všechno, včetně stavů pro PDF přepínače
       await register(email, password, name, company, phone, ico, dic);
-      // Pokud by se přepínače neuložily při registraci, backend je defaultuje na false,
-      // ale pro jistotu je pak uživatel najde v profilu.
       router.replace("/home");
     } catch (e: any) {
       Alert.alert("Chyba při registraci", getApiErrorMessage(e));
@@ -115,6 +113,7 @@ const styles = StyleSheet.create({
   },
   switchRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
     marginVertical: 6,
     paddingHorizontal: 4,
