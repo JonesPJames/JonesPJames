@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "remeslnik-pro",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
@@ -8,7 +8,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "npx --yes eslint@9.25.0 . --ext .ts,.tsx --config eslint.config.js --max-warnings 0"
+    "lint": "npx --yes eslint@9.25.0 . --config eslint.config.js --max-warnings 0"
   },
   "dependencies": {
     "@babel/runtime": "^7.20.6",
