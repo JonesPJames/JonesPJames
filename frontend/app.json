@@ -43,7 +43,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "EXPO_PUBLIC_BACKEND_URL": "https://jonespjames-production.up.railway.app"
+      "EXPO_PUBLIC_BACKEND_URL": "https://jonespjames-production.up.railway.app",
+      "router": {},
+      "eas": {
+        "projectId": "f19cd844-f4ad-4b47-82e9-df8c7889943b"
+      }
     }
   }
 }
