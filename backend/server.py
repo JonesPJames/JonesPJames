@@ -736,7 +736,7 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image # Přidán import Image
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
 
@@ -819,6 +819,7 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
             ("BOTTOMPADDING", (0,0), (-1,-1), 4),
             ("TOPPADDING", (0,0), (-1,-1), 4),
         ]))
+        tbl.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "MIDDLE")]))
         elems.append(tbl)
         return total
 
@@ -841,7 +842,7 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     qr_reader = _get_qr_image_reader(user.get("bank_account", ""), zaloha_k_uhrade, f"Zaloha {job['job_number']}", job['id']) if user.get("bank_account") else None
     
     if qr_reader:
-        rec_tbl = Table(rec_data, colWidths=[85*mm, 50*mm])
+        rec_tbl = Table(rec_data, colWidths=[80*mm, 50*mm])
     else:
         rec_tbl = Table(rec_data, colWidths=[120*mm, 60*mm])
         
@@ -860,7 +861,9 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     ]))
     
     if qr_reader:
-        bottom_block = Table([[rec_tbl, qr_reader]], colWidths=[135*mm, 45*mm])
+        # ZDE JE TA OPRAVA: Zabalení ImageReaderu do platypus Image objektu pro tabulky
+        qr_flowable = Image(qr_reader, width=40*mm, height=40*mm)
+        bottom_block = Table([[rec_tbl, qr_flowable]], colWidths=[135*mm, 45*mm])
         bottom_block.setStyle(TableStyle([
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
             ("ALIGN", (1,0), (1,0), "RIGHT"),
@@ -887,7 +890,7 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image # Přidán import Image
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     try:
@@ -993,7 +996,7 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     qr_reader_billing = _get_qr_image_reader(user.get("bank_account", ""), k_uhrade_final, f"Doplatek {job['job_number']}", job['id']) if user.get("bank_account") else None
 
     if qr_reader_billing:
-        rec = Table(rec_data, colWidths=[85*mm, 50*mm])
+        rec = Table(rec_data, colWidths=[80*mm, 50*mm])
     else:
         rec = Table(rec_data, colWidths=[120*mm, 60*mm])
         
@@ -1008,7 +1011,9 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     
     elems.append(Spacer(1, 6))
     if qr_reader_billing:
-        bottom_block = Table([[rec, qr_reader_billing]], colWidths=[135*mm, 45*mm])
+        # ZDE JE TA OPRAVA: Zabalení ImageReaderu do platypus Image objektu pro tabulky
+        qr_flowable_billing = Image(qr_reader_billing, width=40*mm, height=40*mm)
+        bottom_block = Table([[rec, qr_flowable_billing]], colWidths=[135*mm, 45*mm])
         bottom_block.setStyle(TableStyle([
             ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
             ("ALIGN", (1,0), (1,0), "RIGHT"),
