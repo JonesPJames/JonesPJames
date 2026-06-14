@@ -11,6 +11,8 @@ import uuid
 import logging
 import bcrypt
 import jwt
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Literal
 
@@ -84,6 +86,7 @@ def public_user(u: dict) -> dict:
         "company_code": u.get("company_code", ""),
         "ico": u.get("ico", ""),
         "dic": u.get("dic", ""),
+        "bank_account": u.get("bank_account", ""),  # Přidáno do veřejného profilu
         "show_ico": u.get("show_ico", False),
         "show_dic": u.get("show_dic", False),
         "logo_path": u.get("logo_path", ""),
@@ -101,6 +104,43 @@ def safe_float(v, default=0.0) -> float:
         return float(str(v).replace(",", ".").replace(" ", "").strip())
     except Exception:
         return default
+
+# Pomocná funkce pro bezpečné stažení QR kódu z API bez pádů generování PDF
+def _get_qr_image_reader(account: str, amount: float, message: str, job_id: str) -> Optional[ImageReader]:
+    cleaned = account.replace(" ", "").strip()
+    if not cleaned:
+        return None
+        
+    amount_round = round(amount, 2)
+    if amount_round <= 0:
+        return None
+
+    # Detekce mezinárodního formátu / Revolutu (začíná písmeny, např. LT, CZ, GB...)
+    is_iban = cleaned[:2].isalpha()
+    
+    try:
+        if is_iban:
+            # Mezinárodní standard SEPA EPC QR
+            msg_enc = urllib.parse.quote(message[:140])
+            # Bezplatné spolehlivé globální API pro SEPA QR stringy
+            sepa_string = f"BCD\n002\n1\nSCT\n\n\n{cleaned}\nEUR{amount_round}\n\n\n{msg_enc}"
+            api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={urllib.parse.quote(sepa_string)}"
+        else:
+            # Klasický český formát (převede se na standardní tuzemské API)
+            # Pokud účet neobsahuje kód banky za lomítkem, vrátí None
+            if "/" not in cleaned:
+                return None
+            acc_part, bank_part = cleaned.split("/", 1)
+            msg_enc = urllib.parse.quote(message[:40])
+            api_url = f"https://api.qr-platba.cz/v1/QRGenerator/format/png/account/{acc_part}/bank/{bank_part}/amount/{amount_round}/currency/CZK/message/{msg_enc}/transID/{job_id[:8]}"
+            
+        req = urllib.request.Request(api_url, headers={'User-Agent': 'RemeslnikPro/1.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            img_data = response.read()
+            return ImageReader(io.BytesIO(img_data))
+    except Exception as e:
+        logger.error(f"Chyba při stahování QR kódu: {e}")
+        return None
 
 # Easily-readable code generator (avoids confusing chars 0/O, 1/I/L)
 _CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -165,6 +205,7 @@ class RegisterIn(BaseModel):
     phone: str = ""
     ico: Optional[str] = ""
     dic: Optional[str] = ""
+    bank_account: Optional[str] = ""  # Přidáno do registračního modelu
 
 class LoginIn(BaseModel):
     email: EmailStr
@@ -308,6 +349,7 @@ async def register(payload: RegisterIn, response: Response):
         "company_code": code,
         "ico": payload.ico or "",
         "dic": payload.dic or "",
+        "bank_account": payload.bank_account or "",  # Uložení čísla účtu
         "show_ico": False,
         "show_dic": False,
         "logo_path": "",
@@ -332,7 +374,7 @@ async def me(user: dict = Depends(get_current_user)):
 
 @api.put("/auth/me")
 async def update_me(payload: dict, user: dict = Depends(get_current_user)):
-    allowed_fields = ("name", "company", "phone", "ico", "dic", "show_ico", "show_dic", "logo_path")
+    allowed_fields = ("name", "company", "phone", "ico", "dic", "bank_account", "show_ico", "show_dic", "logo_path")
     allowed = {k: v for k, v in payload.items() if k in allowed_fields}
     if allowed:
         await db.users.update_one({"id": user["id"]}, {"$set": allowed})
@@ -418,25 +460,6 @@ async def update_job(job_id: str, payload: JobUpdate, user: dict = Depends(get_c
     await db.jobs.update_one({"id": job_id}, {"$set": update})
     fresh = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     return serialize_job(fresh)
-
-@api.post("/jobs/{job_id}/renew")
-async def renew_job(job_id: str, user: dict = Depends(get_current_user)):
-    existing = await db.jobs.find_one({"id": job_id, "user_id": user["id"]})
-    if not existing:
-        raise HTTPException(404, "Zakázka nenalezena")
-    await db.jobs.update_one(
-        {"id": job_id},
-        {"$set": {"postponed_at": now_utc(), "status": "odlozeno", "updated_at": now_utc()}},
-    )
-    fresh = await db.jobs.find_one({"id": job_id}, {"_id": 0})
-    return serialize_job(fresh)
-
-@api.delete("/jobs/{job_id}")
-async def delete_job(job_id: str, user: dict = Depends(get_current_user)):
-    res = await db.jobs.delete_one({"id": job_id, "user_id": user["id"]})
-    if res.deleted_count == 0:
-        raise HTTPException(404, "Zakázka nenalezena")
-    return {"ok": True}
 
 # ---------- AI ----------
 async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) -> str:
@@ -727,6 +750,11 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         ["Název nabídky:", job.get("title", "")],
         ["Datum vystavení:", _czech_date(now_utc())],
     ]
+    
+    # Zobrazení bankovního spojení v horní sekci, pokud existuje
+    if user.get("bank_account"):
+        info.append(["Bankovní účet:", user["bank_account"]])
+        
     t = Table(info, colWidths=[40*mm, 140*mm])
     t.setStyle(TableStyle([
         ("FONTNAME", (0,0), (-1,-1), font_name),
@@ -780,14 +808,24 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     totals = job.get("totals", {})
     zaloha_k_uhrade = totals.get("zaloha", (mat + trans) + (0.3 * work))
 
-    rec = Table([
+    # Tvorba tabulky rekapitulace
+    rec_data = [
         ["Cena práce:", _czech_currency(work)],
         ["Cena materiálu:", _czech_currency(mat)],
         ["Doprava a manipulace:", _czech_currency(trans)],
         ["POŽADOVANÁ ZÁLOHA:", _czech_currency(zaloha_k_uhrade)],
         ["CELKEM:", _czech_currency(work + mat + trans)],
-    ], colWidths=[120*mm, 60*mm])
-    rec.setStyle(TableStyle([
+    ]
+    
+    # Šířka tabulky se zmenší na 135mm, pokud vkládáme QR kód napravo (45mm)
+    qr_reader = _get_qr_image_reader(user.get("bank_account", ""), zaloha_k_uhrade, f"Zaloha {job['job_number']}", job['id']) if user.get("bank_account") else None
+    
+    if qr_reader:
+        rec_tbl = Table(rec_data, colWidths=[85*mm, 50*mm])
+    else:
+        rec_tbl = Table(rec_data, colWidths=[120*mm, 60*mm])
+        
+    rec_tbl.setStyle(TableStyle([
         ("FONTNAME", (0,0), (-1,-1), font_name),
         ("FONTSIZE", (0,0), (-1,-1), 10),
         ("FONTNAME", (0,-2), (-1,-2), font_bold),
@@ -797,10 +835,22 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         ("BACKGROUND", (0,-1), (-1,-1), colors.HexColor("#fcede3")),
         ("TEXTCOLOR", (0,-1), (-1,-1), colors.HexColor("#c9820a")),
         ("ALIGN", (1,0), (1,-1), "RIGHT"),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("TOPPADDING", (0,0), (-1,-1), 5),
     ]))
-    elems.append(rec)
+    
+    if qr_reader:
+        # Zabalíme rekapitulaci a QR kód vedle sebe do jednoho řádku
+        bottom_block = Table([[rec_tbl, qr_reader]], colWidths=[135*mm, 45*mm])
+        bottom_block.setStyle(TableStyle([
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("ALIGN", (1,0), (1,0), "RIGHT"),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+            ("TOPPADDING", (0,0), (-1,-1), 0),
+        ]))
+        elems.append(bottom_block)
+    else:
+        elems.append(rec_tbl)
 
     elems.append(Spacer(1, 12))
     if job.get("payment_note"):
@@ -844,6 +894,10 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
         ["Adresa realizace:", job.get("address", "")],
         ["Datum dokončení:", _czech_date(now_utc())],
     ]
+    
+    if user.get("bank_account"):
+        info.append(["Bankovní účet:", user["bank_account"]])
+        
     t = Table(info, colWidths=[40*mm, 140*mm])
     t.setStyle(TableStyle([("FONTNAME", (0,0), (-1,-1), fn), ("FONTSIZE", (0,0), (-1,-1), 10), ("BOTTOMPADDING", (0,0), (-1,-1), 4)]))
     elems.append(t)
@@ -890,7 +944,8 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
                 line += f" | Počasí: {d.get('weather')}"
             if d.get("workers"):
                 line += f" | Pracovníci: {d.get('workers')}"
-            elems.append(Paragraph(line, body))
+            return_val = Paragraph(line, body)
+            elems.append(return_val)
             if d.get("notes"):
                 elems.append(Paragraph(f"<i>Poznámka: {d.get('notes')}</i>", small))
             elems.append(Spacer(1, 2))
@@ -903,21 +958,50 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
         elems.append(Paragraph(f'<link href="{link}" color="#c9820a"><b>📷 Fotodokumentace zakázky →</b></link>', body))
 
     elems.append(Paragraph("Sekce 4 — Rekapitulace", h2))
-    rec = Table([
+    
+    celková_částka = original_total + extra_total
+    # Odečteme zálohu, pokud byla vyžadována/uhrazena, abychom fakturovali jen doplatek
+    totals_billing = job.get("totals", {})
+    zaloha_uhrazena = totals_billing.get("zaloha", 0.0)
+    k_uhrade_final = max(0.0, celková_částka - zaloha_uhrazena)
+
+    rec_data = [
         ["Původní nabídka celkem:", _czech_currency(original_total)],
         ["Vícepráce a materiál navíc:", _czech_currency(extra_total)],
-        ["CELKEM K FAKTURACI:", _czech_currency(original_total + extra_total)],
-    ], colWidths=[120*mm, 60*mm])
+        ["Uhrazená záloha:", f"- {_czech_currency(zaloha_uhrazena)}"],
+        ["DOPLATEK CELKEM:", _czech_currency(k_uhrade_final)],
+    ]
+    
+    # Generování QR kódu pro konečný doplatek vyúčtování
+    qr_reader_billing = _get_qr_image_reader(user.get("bank_account", ""), k_uhrade_final, f"Doplatek {job['job_number']}", job['id']) if user.get("bank_account") else None
+
+    if qr_reader_billing:
+        rec = Table(rec_data, colWidths=[85*mm, 50*mm])
+    else:
+        rec = Table(rec_data, colWidths=[120*mm, 60*mm])
+        
     rec.setStyle(TableStyle([
-        ("FONTNAME", (0,0), (-1,-1), fn), ("FONTSIZE", (0,0), (-1,-1), 11),
-        ("FONTNAME", (0,-1), (-1,-1), fb), ("FONTSIZE", (0,-1), (-1,-1), 14),
+        ("FONTNAME", (0,0), (-1,-1), fn), ("FONTSIZE", (0,0), (-1,-1), 10),
+        ("FONTNAME", (0,-1), (-1,-1), fb), ("FONTSIZE", (0,-1), (-1,-1), 13),
         ("BACKGROUND", (0,-1), (-1,-1), colors.HexColor("#fcede3")),
         ("TEXTCOLOR", (0,-1), (-1,-1), colors.HexColor("#c9820a")),
         ("ALIGN", (1,0), (1,-1), "RIGHT"),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 6), ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5), ("TOPPADDING", (0,0), (-1,-1), 5),
     ]))
+    
     elems.append(Spacer(1, 6))
-    elems.append(rec)
+    if qr_reader_billing:
+        bottom_block = Table([[rec, qr_reader_billing]], colWidths=[135*mm, 45*mm])
+        bottom_block.setStyle(TableStyle([
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("ALIGN", (1,0), (1,0), "RIGHT"),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 0),
+            ("TOPPADDING", (0,0), (-1,-1), 0),
+        ]))
+        elems.append(bottom_block)
+    else:
+        elems.append(rec)
+        
     elems.append(Spacer(1, 8))
     if job.get("payment_note"):
         elems.append(Paragraph(job["payment_note"], small))
@@ -980,10 +1064,10 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
             for it in included:
                 elems.append(Paragraph(f"✓ {it}", body))
                 
-        excluded = v.get("excluded") or []
-        if excluded:
+            exclude_list = v.get("excluded") or []
+        if exclude_list:
             elems.append(Paragraph("<b>Co v ceně ZAHRNUTO NENÍ:</b>", body))
-            for it in excluded:
+            for it in exclude_list:
                 elems.append(Paragraph(f"✗ {it}", body))
                 
         elems.append(Spacer(1, 10))
@@ -1473,6 +1557,7 @@ async def startup():
             "company_code": code,
             "ico": "",
             "dic": "",
+            "bank_account": "",
             "show_ico": False,
             "show_dic": False,
             "logo_path": "",
