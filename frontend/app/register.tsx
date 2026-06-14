@@ -31,6 +31,7 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [ico, setIco] = useState("");
   const [dic, setDic] = useState("");
+  const [bankAccount, setBankAccount] = useState(""); // Přidán stav pro bankovní účet
   const [showIco, setShowIco] = useState(false);
   const [showDic, setShowDic] = useState(false);
   const [hidePassword, setHidePassword] = useState(true); // Stav pro očko
@@ -64,7 +65,8 @@ export default function Register() {
 
     setBusy(true);
     try {
-      await register(email, password, name, company, phone, ico, dic);
+      // Předání bankAccount na konec registrace pro backend
+      await register(email, password, name, company, phone, ico, dic, bankAccount);
       router.replace("/home");
     } catch (e: any) {
       Alert.alert("Chyba při registraci", getApiErrorMessage(e));
@@ -83,7 +85,7 @@ export default function Register() {
           </View>
 
           <View style={styles.card}>
-            <Field label="Jméno a příjmení" value={name} onChangeText={setName} testID="r-name" />
+            <Field label="Jméno a příjmení *" value={name} onChangeText={setName} testID="r-name" />
             <Field label="Název firmy" value={company} onChangeText={setCompany} testID="r-company" />
             <Field label="Telefon" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="r-phone" />
             
@@ -107,11 +109,19 @@ export default function Register() {
               />
             </View>
 
-            <Field label="E-mail" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" testID="r-email" />
+            {/* NOVÉ POLE: Číslo účtu / IBAN */}
+            <Field 
+              label="Číslo účtu nebo IBAN pro QR kódy" 
+              value={bankAccount} 
+              onChangeText={setBankAccount} 
+              testID="r-bank-account" 
+            />
+
+            <Field label="E-mail *" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" testID="r-email" />
             
             {/* Vlastní pole pro Heslo s Očkem */}
             <View style={styles.passwordContainer}>
-              <Text style={styles.passwordLabel}>Heslo</Text>
+              <Text style={styles.passwordLabel}>Heslo *</Text>
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.passwordInput}
