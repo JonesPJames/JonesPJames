@@ -27,6 +27,7 @@ export default function Profil() {
   const [phone, setPhone] = useState(user?.phone || "");
   const [ico, setIco] = useState(user?.ico || "");
   const [dic, setDic] = useState(user?.dic || "");
+  const [bankAccount, setBankAccount] = useState(user?.bank_account || ""); // Nové pole pro účet
   const [showIco, setShowIco] = useState(user?.show_ico ?? false);
   const [showDic, setShowDic] = useState(user?.show_dic ?? false);
   const [busy, setBusy] = useState(false);
@@ -40,6 +41,7 @@ export default function Profil() {
         phone, 
         ico, 
         dic, 
+        bank_account: bankAccount, // Posíláme číslo účtu na backend
         show_ico: showIco, 
         show_dic: showDic 
       });
@@ -94,6 +96,15 @@ export default function Profil() {
               />
             </View>
 
+            {/* Nové textové pole pro bankovní účet / Revolut IBAN */}
+            <Field 
+              label="Číslo účtu / IBAN (Revolut)" 
+              value={bankAccount} 
+              onChangeText={setBankAccount} 
+              autoCapitalize="characters" 
+              testID="p-bank-account" 
+            />
+
             <View style={{ height: 14 }} />
             <PrimaryButton title="Uložit změny" onPress={save} loading={busy} testID="p-save" />
           </View>
@@ -129,7 +140,7 @@ const styles = StyleSheet.create({
   codeStripValue: { fontSize: 22, fontWeight: "900", letterSpacing: 6, color: theme.colors.text, marginTop: 2 },
   switchRow: {
     flexDirection: "row",
-    justifyContent: "between",
+    justifyContent: "space-between", // Opraveno z nefunkčního "between"
     alignItems: "center",
     marginVertical: 8,
     paddingHorizontal: 4,

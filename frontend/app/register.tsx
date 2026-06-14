@@ -8,6 +8,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Switch,
+  TextInput,
+  TouchableOpacity,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,6 +18,7 @@ import { Field } from "../src/components/Field";
 import { PrimaryButton } from "../src/components/PrimaryButton";
 import { theme } from "../src/theme";
 import { getApiErrorMessage } from "../src/api";
+import { Ionicons } from "@expo/vector-icons"; // Výchozí ikony v Expu
 
 export default function Register() {
   const { register } = useAuth();
@@ -30,16 +33,37 @@ export default function Register() {
   const [dic, setDic] = useState("");
   const [showIco, setShowIco] = useState(false);
   const [showDic, setShowDic] = useState(false);
+  const [hidePassword, setHidePassword] = useState(true); // Stav pro očko
   const [busy, setBusy] = useState(false);
+
+  // Funkce pro kontrolu síly hesla
+  function isPasswordStrong(pass: string) {
+    const hasMinLength = pass.length >= 8;
+    const hasNumber = /\d/.test(pass);
+    const hasUpperCase = /[A-Z]/.test(pass);
+    return {
+      isValid: hasMinLength && hasNumber && hasUpperCase,
+      hasMinLength,
+      hasNumber,
+      hasUpperCase
+    };
+  }
+
+  const passwordStatus = isPasswordStrong(password);
 
   async function onRegister() {
     if (!email || !password || !name) {
       Alert.alert("Chyba", "Jméno, e-mail a heslo jsou povinné údaje.");
       return;
     }
+
+    if (!passwordStatus.isValid) {
+      Alert.alert("Slabé heslo", "Heslo nesplňuje bezpečnostní požadavky.");
+      return;
+    }
+
     setBusy(true);
     try {
-      // Tady posíláme komplet všechno, včetně stavů pro PDF přepínače
       await register(email, password, name, company, phone, ico, dic);
       router.replace("/home");
     } catch (e: any) {
@@ -84,7 +108,43 @@ export default function Register() {
             </View>
 
             <Field label="E-mail" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" testID="r-email" />
-            <Field label="Heslo" value={password} onChangeText={setPassword} secureTextEntry testID="r-password" />
+            
+            {/* Vlastní pole pro Heslo s Očkem */}
+            <View style={styles.passwordContainer}>
+              <Text style={styles.passwordLabel}>Heslo</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={styles.passwordInput}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={hidePassword}
+                  autoCapitalize="none"
+                  testID="r-password"
+                />
+                <TouchableOpacity style={styles.eyeButton} onPress={() => setHidePassword(!hidePassword)}>
+                  <Ionicons 
+                    name={hidePassword ? "eye-off-outline" : "eye-outline"} 
+                    size={22} 
+                    color={theme.colors.textMuted} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Dynamická nápověda pro silné heslo */}
+            {password.length > 0 && (
+              <View style={styles.validationBox}>
+                <Text style={[styles.valText, passwordStatus.hasMinLength ? styles.valOk : styles.valErr]}>
+                  {passwordStatus.hasMinLength ? "✓" : "✗"} Minimálně 8 znaků
+                </Text>
+                <Text style={[styles.valText, passwordStatus.hasUpperCase ? styles.valOk : styles.valErr]}>
+                  {passwordStatus.hasUpperCase ? "✓" : "✗"} Alespoň jedno velké písmeno
+                </Text>
+                <Text style={[styles.valText, passwordStatus.hasNumber ? styles.valOk : styles.valErr]}>
+                  {passwordStatus.hasNumber ? "✓" : "✗"} Alespoň jedno číslo
+                </Text>
+              </View>
+            )}
             
             <View style={{ height: 14 }} />
             <PrimaryButton title="Zaregistrovat se" onPress={onRegister} loading={busy} testID="r-submit" />
@@ -123,5 +183,48 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.colors.textMuted,
   },
+  passwordContainer: {
+    marginBottom: 12,
+  },
+  passwordLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: theme.colors.text,
+    marginBottom: 6,
+  },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.colors.bg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.input,
+  },
+  passwordInput: {
+    flex: 1,
+    height: 48,
+    paddingHorizontal: 12,
+    color: theme.colors.text,
+  },
+  eyeButton: {
+    padding: 12,
+  },
+  validationBox: {
+    backgroundColor: theme.colors.bg,
+    padding: 10,
+    borderRadius: theme.radius.input,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  valText: {
+    fontSize: 12,
+    marginVertical: 2,
+  },
+  valOk: {
+    color: "#2e7d32",
+  },
+  valErr: {
+    color: "#c62828",
+  },
 });
-

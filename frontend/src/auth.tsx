@@ -11,6 +11,7 @@ export type User = {
   company_code: string;
   ico?: string;
   dic?: string;
+  bank_account?: string; // Rozšíření typu uživatele o číslo účtu / IBAN
 };
 
 export type Employee = {
@@ -41,7 +42,7 @@ type AuthCtx = {
   /** Alias for loginOwner — used by older login.tsx. */
   login: (email: string, password: string) => Promise<void>;
   loginEmployee: (companyCode: string, pin: string) => Promise<void>;
-  register: (email: string, password: string, name: string, company: string, phone: string, ico?: string, dic?: string) => Promise<void>;
+  register: (email: string, password: string, name: string, company: string, phone: string, ico?: string, dic?: string, bank_account?: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
@@ -89,8 +90,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setActor({ role: "employee", employee: r.data.employee });
   }
 
-  async function register(email: string, password: string, name: string, company: string, phone: string, ico: string = "", dic: string = "") {
-    const r = await api.post("/auth/register", { email, password, name, company, phone, ico, dic });
+  async function register(
+    email: string, 
+    password: string, 
+    name: string, 
+    company: string, 
+    phone: string, 
+    ico: string = "", 
+    dic: string = "", 
+    bank_account: string = "" // Přidáno do parametrů registrace
+  ) {
+    const r = await api.post("/auth/register", { email, password, name, company, phone, ico, dic, bank_account });
     await setToken(r.data.token);
     await AsyncStorage.setItem(ROLE_KEY, "owner");
     setActor({ role: "owner", user: r.data.user });
@@ -154,4 +164,3 @@ export function useOwner() {
   const user = actor?.role === "owner" ? actor.user : null;
   return { user, loading, login: loginOwner, register, logout, refresh, updateProfile };
 }
-
