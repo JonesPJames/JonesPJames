@@ -761,7 +761,7 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     elems = [Spacer(1, 40)]
     header = Table([[
         Paragraph(f"<b>Cenová nabídka č. {job['job_number']}</b>", h1),
-        Paragraph(f"<b>{user.get('company') or user.get('name','')}</b><br/>{user.get('nameindent') if 'nameindent' in user else user.get('name','')}<br/>Tel: {user.get('phone','')}<br/>{user.get('email','')}", small),
+        Paragraph(f"<b>{user.get('company') or user.get('name','')}</b><br/>{user.get('name','')}<br/>Tel: {user.get('phone','')}<br/>{user.get('email','')}", small),
     ]], colWidths=[110*mm, 70*mm])
     header.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "TOP")]))
     elems.append(header)
