@@ -111,7 +111,23 @@ def create_router(db, get_current_user):
                            secret, algorithm="HS256")
         return {"access_token": token, "token_type": "bearer", "expires_in": 900}
 
+    async def list_owner_jobs(user=Depends(delegated_owner)):
+        """Read-only operational jobs, owner-scoped; no direct JARVIS Mongo access."""
+        cursor = db.jobs.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(100)
+        result = []
+        async for job in cursor:
+            result.append({
+                "id": job.get("id"),
+                "job_number": job.get("job_number"),
+                "title": job.get("title", ""),
+                "client_name": job.get("client_name", ""),
+                "address": job.get("address", ""),
+                "status": job.get("status", ""),
+            })
+        return {"jobs": result, "count": len(result), "limit": 100}
+
     router.add_api_route("/token", exchange_gateway_token, methods=["POST"])
+    router.add_api_route("/jobs", list_owner_jobs, methods=["GET"])
     router.add_api_route("/projects", create_project, methods=["POST"])
     router.add_api_route("/projects/{project_id}", get_project, methods=["GET"])
     router.add_api_route("/projects/{project_id}/commands", command, methods=["POST"])
