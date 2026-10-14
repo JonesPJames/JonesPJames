@@ -1588,6 +1588,9 @@ async def startup():
     elif not verify_password(admin_pass, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pass)}})
 
+from jarvis_sop import create_router as create_jarvis_sop_router
+app.include_router(create_jarvis_sop_router(db, get_current_user), prefix="/api")
+
 @app.on_event("shutdown")
 async def shutdown():
     client.close()
