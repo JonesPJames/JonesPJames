@@ -8,7 +8,7 @@ SERVER = (ROOT / "server.py").read_text(encoding="utf-8")
 def test_independent_integration():
     assert 'prefix="/integrations/jarvis"' in SOURCE
     assert "jarvis_sop" not in SOURCE.lower()
-    assert 'create_jarvis_integration_router(db)' in SERVER
+    assert 'create_jarvis_integration_router(db, get_current_user)' in SERVER
 
 def test_owner_isolation():
     assert '"user_id": user["id"]' in SOURCE
@@ -21,3 +21,8 @@ def test_read_only():
     assert "db.jobs.update_" not in SOURCE
     assert "db.jobs.insert_" not in SOURCE
     assert "db.jobs.delete_" not in SOURCE
+
+def test_token_exchange():
+    assert 'prefix="/integrations/jarvis"' in SOURCE
+    assert 'router.post("/token")' in SOURCE
+    assert 'Depends(get_current_user)' in SOURCE
