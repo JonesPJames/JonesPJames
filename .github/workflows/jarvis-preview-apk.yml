@@ -1,6 +1,11 @@
 name: JARVIS internal Android APK
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - work/jarvis-sop-api-20261014
+    paths:
+      - '.github/workflows/jarvis-preview-apk.yml'
 jobs:
   build:
     runs-on: ubuntu-latest
