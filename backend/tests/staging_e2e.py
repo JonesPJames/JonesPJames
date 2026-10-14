@@ -38,7 +38,7 @@ def run():
     assert "/api/jarvis/sop/projects" in schema["paths"]
     uid = uuid4().hex
     owner = call(PRO, "/api/auth/register", "POST", {
-        "email": "jarvis-e2e-" + uid + "@example.invalid",
+        "email": "jarvis-e2e-" + uid + "@example.com",
         "password": "E2E-" + uid,
         "name": "JARVIS E2E Synthetic Owner"
     })
