@@ -9,6 +9,8 @@ export type User = {
   company: string;
   phone: string;
   company_code: string;
+  show_ico?: boolean;
+  show_dic?: boolean;
   ico?: string;
   dic?: string;
   bank_account?: string; // Rozšíření typu uživatele o číslo účtu / IBAN
