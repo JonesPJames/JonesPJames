@@ -84,6 +84,11 @@ def run():
     isolated = call(JARVIS, "/api/v1/jarvis/jobs", token=other_gateway)
     assert isolated["count"] == 0 and isolated["jobs"] == []
     print("PASS 13: other owner cannot read first owner's jobs", flush=True)
+    detail = call(JARVIS, "/api/v1/jarvis/jobs/" + job["id"], token=gateway)
+    assert detail["id"] == job["id"] and detail["title"] == "E2E job " + uid
+    print("PASS 14: owner can read job detail", flush=True)
+    call(JARVIS, "/api/v1/jarvis/jobs/" + job["id"], token=other_gateway, expected=(404,))
+    print("PASS 15: other owner cannot read job detail", flush=True)
     print("STAGING_E2E_PASS", flush=True)
 
 if __name__ == "__main__":
