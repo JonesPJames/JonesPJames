@@ -6,6 +6,8 @@ on:
       - 'frontend/app/jarvis.tsx'
       - 'frontend/app/home.tsx'
       - 'frontend/src/api.ts'
+      - 'frontend/src/auth.tsx'
+      - 'frontend/tsconfig.json'
       - 'frontend/eas.json'
       - '.github/workflows/jarvis-mobile-validation.yml'
   workflow_dispatch:
