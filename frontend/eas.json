@@ -9,7 +9,10 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_JARVIS_API_URL": "https://jarvis-api-staging-staging.up.railway.app"
+      }
     },
     "production": {
       "autoIncrement": true
