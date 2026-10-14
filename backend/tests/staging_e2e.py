@@ -65,6 +65,25 @@ def run():
     conflict = dict(command, idempotencyKey="conflict-" + uid)
     call(JARVIS, "/api/v1/jarvis/command", "POST", conflict, gateway, expected=(409,))
     print("PASS 9: stale version rejected", flush=True)
+    assert "/api/jarvis/sop/jobs" in schema["paths"]
+    assert call(JARVIS, "/api/v1/jarvis/jobs", expected=(401,))["error"]["code"] == "UNAUTHORIZED"
+    print("PASS 10: anonymous jobs request denied", flush=True)
+    empty = call(JARVIS, "/api/v1/jarvis/jobs", token=gateway)
+    assert empty["count"] == 0 and empty["jobs"] == []
+    print("PASS 11: owner-scoped jobs initially empty", flush=True)
+    job = call(PRO, "/api/jobs", "POST", {"client_name": "E2E client", "title": "E2E job " + uid, "address": "Test only"}, pro_token)
+    own = call(JARVIS, "/api/v1/jarvis/jobs", token=gateway)
+    assert own["count"] == 1 and own["jobs"][0]["id"] == job["id"]
+    print("PASS 12: operational job visible via JARVIS", flush=True)
+    other = call(PRO, "/api/auth/register", "POST", {
+        "email": "jarvis-e2e-other-" + uid + "@example.com",
+        "password": "E2E-other-" + uid,
+        "name": "Other E2E Owner"
+    })
+    other_gateway = call(PRO, "/api/jarvis/sop/token", "POST", {}, other["token"])["access_token"]
+    isolated = call(JARVIS, "/api/v1/jarvis/jobs", token=other_gateway)
+    assert isolated["count"] == 0 and isolated["jobs"] == []
+    print("PASS 13: other owner cannot read first owner's jobs", flush=True)
     print("STAGING_E2E_PASS", flush=True)
 
 if __name__ == "__main__":
