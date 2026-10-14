@@ -4,7 +4,7 @@ Separate from operational jobs. Mount only behind existing FastAPI auth.
 import os
 import jwt
 from fastapi import Header
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -100,6 +100,18 @@ def create_router(db, get_current_user):
             upsert=True)
         return updated
 
+    async def exchange_gateway_token(user=Depends(get_current_user)):
+        secret = os.environ.get("JARVIS_GATEWAY_SECRET", "")
+        if len(secret) < 32:
+            raise HTTPException(503, "GATEWAY_EXCHANGE_NOT_CONFIGURED")
+        now = datetime.now(timezone.utc)
+        token = jwt.encode({"sub": user["id"], "companyId": user["id"], "role": "owner",
+                            "iss": "jarvis-gateway-staging", "aud": "jarvis-api-staging",
+                            "iat": now, "exp": now + timedelta(minutes=15)},
+                           secret, algorithm="HS256")
+        return {"access_token": token, "token_type": "bearer", "expires_in": 900}
+
+    router.add_api_route("/token", exchange_gateway_token, methods=["POST"])
     router.add_api_route("/projects", create_project, methods=["POST"])
     router.add_api_route("/projects/{project_id}", get_project, methods=["GET"])
     router.add_api_route("/projects/{project_id}/commands", command, methods=["POST"])
