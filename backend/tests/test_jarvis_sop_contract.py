@@ -12,7 +12,10 @@ def test_owner_scoped_queries():
 
 def test_separate_sop_collection():
     assert 'db.jarvis_sop_projects' in SOURCE
-    assert 'db.jobs' not in SOURCE
+    assert 'db.jobs.find(' in SOURCE
+    assert 'db.jobs.update_' not in SOURCE
+    assert 'db.jobs.insert_' not in SOURCE
+    assert '"user_id": user["id"]' in SOURCE
 
 def test_api_is_mounted():
     assert 'create_jarvis_sop_router(db, get_current_user)' in SERVER
