@@ -63,6 +63,8 @@ def create_router(db, get_current_user):
         state = current["state"]
         existing = await db.jarvis_sop_commands.find_one({"projectId": project_id, "companyId": owner_id, "key": payload.idempotencyKey}, {"_id": 0})
         if existing:
+            if existing.get('command') != payload.model_dump():
+                raise HTTPException(409, 'IDEMPOTENCY_KEY_REUSED')
             return existing["project"]
         if state["version"] != payload.expectedVersion:
             raise HTTPException(409, "VERSION_CONFLICT")
@@ -94,7 +96,7 @@ def create_router(db, get_current_user):
             raise HTTPException(409, "VERSION_CONFLICT")
         await db.jarvis_sop_commands.update_one(
             {"projectId": project_id, "companyId": owner_id, "key": payload.idempotencyKey},
-            {"$setOnInsert": {"projectId": project_id, "companyId": owner_id, "key": payload.idempotencyKey, "project": updated}},
+            {"$setOnInsert": {"projectId": project_id, "companyId": owner_id, "key": payload.idempotencyKey, "command": payload.model_dump(), "project": updated}},
             upsert=True)
         return updated
 
