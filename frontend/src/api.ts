@@ -2,7 +2,7 @@ import axios, { AxiosInstance } from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Natvrdo zapsaná URL, aby mobil nikdy nevzal prázdný řetězec
-const BASE = "https://jonespjames-production.up.railway.app";
+const BASE = process.env.EXPO_PUBLIC_PRO_API_URL || "https://jonespjames-production.up.railway.app";
 
 export const TOKEN_KEY = "rp_token";
 
