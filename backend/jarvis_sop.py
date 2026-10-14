@@ -127,7 +127,15 @@ def create_router(db, get_current_user):
         return {"jobs": result, "count": len(result), "limit": 100}
 
     router.add_api_route("/token", exchange_gateway_token, methods=["POST"])
+    async def get_owner_job(job_id: str, user=Depends(delegated_owner)):
+        job = await db.jobs.find_one({"id": job_id, "user_id": user["id"]}, {"_id": 0})
+        if not job:
+            raise HTTPException(404, "JOB_NOT_FOUND")
+        fields = ("id", "job_number", "title", "client_name", "address", "status")
+        return {key: job[key] for key in fields if key in job}
+
     router.add_api_route("/jobs", list_owner_jobs, methods=["GET"])
+    router.add_api_route("/jobs/{job_id}", get_owner_job, methods=["GET"])
     router.add_api_route("/projects", create_project, methods=["POST"])
     router.add_api_route("/projects/{project_id}", get_project, methods=["GET"])
     router.add_api_route("/projects/{project_id}/commands", command, methods=["POST"])
