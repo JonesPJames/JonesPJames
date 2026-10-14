@@ -59,6 +59,12 @@ def run():
     print("PASS 8: jobs isolated by owner", flush=True)
     call(JARVIS, "/api/v1/jarvis/jobs/" + job["id"], token=other_gateway, expected=(404,))
     print("PASS 9: detail isolated by owner", flush=True)
+    assistant = call(JARVIS, "/api/v1/jarvis/assistant", "POST", {"message": "Kolik mám zakázek?"}, gateway)
+    assert assistant["mode"] == "verified-data" and assistant["total"] == 1
+    print("PASS 10: assistant answers from owner's jobs", flush=True)
+    other_answer = call(JARVIS, "/api/v1/jarvis/assistant", "POST", {"message": "Kolik mám zakázek?"}, other_gateway)
+    assert other_answer["total"] == 0
+    print("PASS 11: assistant preserves owner isolation", flush=True)
     print("JARVIS_PRO_E2E_PASS", flush=True)
 
 if __name__ == "__main__":
