@@ -16,3 +16,9 @@ def test_separate_sop_collection():
 
 def test_api_is_mounted():
     assert 'create_jarvis_sop_router(db, get_current_user)' in SERVER
+
+def test_delegated_identity():
+    assert 'JARVIS_INTEGRATION_SECRET' in SOURCE
+    assert 'audience="remeslnik-pro-sop"' in SOURCE
+    assert 'claims.get("companyId") != claims.get("sub")' in SOURCE
+    assert 'IDEMPOTENCY_KEY_REUSED' in SOURCE
