@@ -11,7 +11,8 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_JARVIS_API_URL": "https://jarvis-api-staging-staging.up.railway.app"
+        "EXPO_PUBLIC_JARVIS_API_URL": "https://jarvis-api-staging-staging.up.railway.app",
+        "EXPO_PUBLIC_PRO_API_URL": "https://remeslnik-pro-sop-staging-staging.up.railway.app"
       }
     },
     "production": {
