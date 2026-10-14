@@ -12,7 +12,7 @@ from pymongo import ReturnDocument
 
 router = APIRouter(prefix="/jarvis/sop", tags=["jarvis-sop"])
 PHASES = {"START", "A", "B", "S", "C", "D", "E", "F", "G", "H"}
-TRANSITIONS = {"START": {"A"}, "A": {"B"}, "B": {"S", "C"}, "S": {"C"}, "C": {"D"}, "D": {"E"}, "E": {"F"}, "F": {"G"}, "G": {"H"}, "H": set()}
+TRANSITIONS = {"START": {"A"}, "A": {"B"}, "B": {"C"}, "S": {"C"}, "C": {"D"}, "D": {"E"}, "E": {"F"}, "F": {"G"}, "G": {"H"}, "H": set()}
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
