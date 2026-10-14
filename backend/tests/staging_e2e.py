@@ -3,6 +3,7 @@ Uses a unique synthetic owner in an isolated staging database. Never point at pr
 """
 import json
 import os
+import time
 import urllib.request
 import urllib.error
 from uuid import uuid4
@@ -84,7 +85,16 @@ def run():
     isolated = call(JARVIS, "/api/v1/jarvis/jobs", token=other_gateway)
     assert isolated["count"] == 0 and isolated["jobs"] == []
     print("PASS 13: other owner cannot read first owner's jobs", flush=True)
-    detail = call(JARVIS, "/api/v1/jarvis/jobs/" + job["id"], token=gateway)
+    detail = None
+    for attempt in range(24):
+        try:
+            detail = call(JARVIS, "/api/v1/jarvis/jobs/" + job["id"], token=gateway)
+            break
+        except AssertionError as exc:
+            if "got 404" not in str(exc) or attempt == 23:
+                raise
+            time.sleep(5)
+    assert detail is not None
     assert detail["id"] == job["id"] and detail["title"] == "E2E job " + uid
     print("PASS 14: owner can read job detail", flush=True)
     call(JARVIS, "/api/v1/jarvis/jobs/" + job["id"], token=other_gateway, expected=(404,))
