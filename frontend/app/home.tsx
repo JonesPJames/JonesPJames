@@ -24,6 +24,7 @@ const TILES: { key: string; title: string; subtitle: string; icon: any; href: st
   { key: "nova", title: "Nová zakázka", subtitle: "Vytvořit cenovou nabídku", icon: "add-outline", href: "/nova-zakazka", primary: true },
   { key: "adresar", title: "Adresář zakázek", subtitle: "Všechny nabídky a stavy", icon: "folder-outline", href: "/adresar" },
   { key: "kalkulacka", title: "Kalkulačka prací", subtitle: "Ceny dle profese", icon: "calculator-outline", href: "/kalkulacka" },
+  { key: "jarvis", title: "JARVIS AI", subtitle: "Asistent pro moje zakázky", icon: "chatbubbles-outline", href: "/jarvis" },
   { key: "generator", title: "Generátor nabídek", subtitle: "AI vytvoří 3 varianty", icon: "sparkles-outline", href: "/generator" },
   { key: "zamestnanci", title: "Zaměstnanci", subtitle: "Správa týmu a PIN přístupů", icon: "people-outline", href: "/zamestnanci" },
   { key: "profil", title: "Můj profil", subtitle: "Jméno, firma, telefon", icon: "person-outline", href: "/profil" },
