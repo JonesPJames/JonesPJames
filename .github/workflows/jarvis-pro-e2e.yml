@@ -1,0 +1,25 @@
+name: JARVIS Pro live staging E2E
+on:
+  push:
+    branches: [work/jarvis-sop-api-20261014]
+    paths:
+      - 'backend/jarvis_integration.py'
+      - 'backend/tests/jarvis_pro_e2e.py'
+      - '.github/workflows/jarvis-pro-e2e.yml'
+  workflow_dispatch:
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Wait for Railway rollout and test
+        run: |
+          for attempt in $(seq 1 18); do
+            if python backend/tests/jarvis_pro_e2e.py; then exit 0; fi
+            echo "Waiting for Railway deployment ($attempt/18)"
+            sleep 15
+          done
+          exit 1
