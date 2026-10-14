@@ -1596,7 +1596,7 @@ async def ensure_jarvis_sop_indexes():
         [("companyId", 1), ("projectId", 1), ("key", 1)], unique=True)
 
 from jarvis_integration import create_router as create_jarvis_integration_router
-app.include_router(create_jarvis_integration_router(db), prefix="/api")
+app.include_router(create_jarvis_integration_router(db, get_current_user), prefix="/api")
 
 from jarvis_sop import create_router as create_jarvis_sop_router
 app.include_router(create_jarvis_sop_router(db, get_current_user), prefix="/api")
