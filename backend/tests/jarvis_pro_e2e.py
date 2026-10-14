@@ -65,6 +65,11 @@ def run():
     other_answer = call(JARVIS, "/api/v1/jarvis/assistant", "POST", {"message": "Kolik mám zakázek?"}, other_gateway)
     assert other_answer["total"] == 0
     print("PASS 11: assistant preserves owner isolation", flush=True)
+    status = call(JARVIS, "/api/v1/jarvis/integration/status", token=gateway)
+    assert status["connected"] is True and status["readOnly"] is True
+    print("PASS 12: authenticated integration status", flush=True)
+    call(JARVIS, "/api/v1/jarvis/integration/status", expected=(401,))
+    print("PASS 13: integration status requires login", flush=True)
     print("JARVIS_PRO_E2E_PASS", flush=True)
 
 if __name__ == "__main__":
