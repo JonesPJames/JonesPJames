@@ -21,4 +21,5 @@ jobs:
         with:
           node-version: '22'
       - run: npm install --legacy-peer-deps --no-audit --no-fund
-      - run: npx tsc --noEmit
+      - name: Validate new JARVIS screen with TypeScript 6 compatible compiler
+        run: npx --yes -p typescript@6.0.2 tsc --noEmit
