@@ -1562,10 +1562,39 @@ async def startup():
         if owner and owner.get("company_code"):
             await db.employees.update_one({"id": e["id"], "owner_user_id": e["owner_user_id"]}, {"$set": {"company_code": owner["company_code"]}})
 
+    # One-time, staging-only owner reset. The marker prevents deletion of a newly
+    # registered account on later restarts. Never enabled in production.
+    reset_email = os.environ.get("STAGING_ONE_TIME_DELETE_OWNER_EMAIL", "").strip().lower()
+    if os.environ.get("RAILWAY_ENVIRONMENT_NAME") == "staging" and reset_email:
+        marker_id = "staging-owner-delete-v1:" + reset_email
+        marker = await db.maintenance_migrations.find_one({"_id": marker_id})
+        if marker is None:
+            target = await db.users.find_one({"email": reset_email}, {"_id": 1, "id": 1})
+            if target is not None:
+                # Claim the exact account ID before deleting; never delete by
+                # email after the claim, to protect future registrations.
+                try:
+                    await db.maintenance_migrations.insert_one({
+                        "_id": marker_id, "target_user_id": target["id"],
+                        "created_at": now_utc(), "status": "claimed"
+                    })
+                except Exception:
+                    logger.warning("Owner reset migration already claimed")
+                claim = await db.maintenance_migrations.find_one({"_id": marker_id})
+                if claim and claim.get("target_user_id") == target["id"]:
+                    result = await db.users.delete_one({"_id": target["_id"], "id": target["id"]})
+                    await db.maintenance_migrations.update_one({"_id": marker_id}, {"$set": {
+                        "status": "completed", "deleted_count": result.deleted_count,
+                        "completed_at": now_utc()
+                    }})
+                    logger.info("Staging owner reset completed; deleted_count=%d", result.deleted_count)
+            else:
+                logger.info("Staging owner reset: target account not found")
+
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
     admin_pass = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})
-    if not existing:
+    if not existing and not (os.environ.get("RAILWAY_ENVIRONMENT_NAME") == "staging" and admin_email.lower() == reset_email):
         code = _gen_company_code()
         while await db.users.find_one({"company_code": code}):
             code = _gen_company_code()
