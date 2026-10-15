@@ -8,6 +8,13 @@ import { api } from "../src/api";
 const JARVIS_URL = process.env.EXPO_PUBLIC_JARVIS_API_URL || "";
 type Reply = { answer: string; mode: string; total?: number };
 
+function parseJobCreation(text: string): string | null {
+  const prefix = /^(?:vytvoř|založ|přidej)\s+(?:novou\s+)?zakázku\s+pro\s+(?:pana|paní|firmu)\s+/i;
+  if (!prefix.test(text.trim())) return null;
+  const name = text.trim().replace(prefix, "").replace(/[.!]$/, "").trim();
+  return name.length >= 2 && name.length <= 120 ? name : null;
+}
+
 export default function JarvisScreen() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -20,8 +27,30 @@ export default function JarvisScreen() {
     if (!authLoading && !user) router.replace("/login");
   }, [authLoading, user, router]);
 
+  async function createJob(client: string) {
+    setBusy(true);
+    try {
+      const result = await api.post("/jobs", { client_name: client, title: "Nová zakázka – " + client, address: "", prace: [], material: [], doprava: [] });
+      setAnswer("Zakázka pro " + client + " byla vytvořena jako rozpracovaná.");
+      Alert.alert("Zakázka vytvořena", "Otevřít novou zakázku?", [
+        { text: "Později", style: "cancel" },
+        { text: "Otevřít", onPress: () => router.push(("/zakazka/" + result.data.id) as any) },
+      ]);
+    } catch {
+      Alert.alert("Chyba", "Vytvoření selhalo. Před opakováním zkontrolujte seznam zakázek.");
+    } finally { setBusy(false); }
+  }
+
   async function ask() {
     if (!message.trim() || busy) return;
+    const newClient = parseJobCreation(message);
+    if (newClient) {
+      Alert.alert("Potvrzení nové zakázky", "Založit rozpracovanou zakázku pro " + newClient + "?", [
+        { text: "Zrušit", style: "cancel" },
+        { text: "Vytvořit", onPress: () => { void createJob(newClient); } },
+      ]);
+      return;
+    }
     if (!JARVIS_URL.startsWith("https://")) {
       Alert.alert("JARVIS není nakonfigurován", "Pro tuto verzi aplikace zatím není dostupné bezpečné připojení.");
       return;
@@ -70,7 +99,7 @@ export default function JarvisScreen() {
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Odeslat dotaz</Text>}
         </TouchableOpacity>
         {answer ? <View style={styles.answer}><Text style={styles.label}>Odpověď JARVIS</Text><Text style={styles.answerText}>{answer}</Text></View> : null}
-        <Text style={styles.note}>Aktuální verze odpovídá na základní dotazy z ověřených dat zakázek. Nemění žádné záznamy.</Text>
+        <Text style={styles.note}>Příkaz k vytvoření zakázky vyžaduje potvrzení. Ostatní dotazy pouze čtou ověřená data.</Text>
       </ScrollView>
     </SafeAreaView>
   );
