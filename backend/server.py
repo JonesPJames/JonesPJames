@@ -32,7 +32,6 @@ db_name = os.environ["DB_NAME"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[db_name]
 
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 
 app = FastAPI(title="Remeslnik Pro API")
 api = APIRouter(prefix="/api")
@@ -486,26 +485,44 @@ async def delete_job(job_id: str, user: dict = Depends(get_current_user)):
 
 # ---------- AI ----------
 async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) -> str:
+    """Server-side OpenAI call; API key is never sent to the mobile client."""
     import asyncio
-    import google.generativeai as genai
+    import json
+    import urllib.error
 
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(status_code=500, detail="V nastavení chybí API klíč pro Gemini (EMERGENT_LLM_KEY)")
+    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not key:
+        raise HTTPException(status_code=503, detail="AI zatím není aktivována. Nastavte OPENAI_API_KEY v Railway.")
+    model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
+    body = json.dumps({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+    }).encode("utf-8")
 
-    def _run_request():
-        genai.configure(api_key=EMERGENT_LLM_KEY)
-        model = genai.GenerativeModel(
-            model_name="gemini-3.5-flash",
-            system_instruction=system
+    def _request():
+        request = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=body,
+            headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+            method="POST",
         )
-        response = model.generate_content(prompt)
-        return response.text
+        with urllib.request.urlopen(request, timeout=45) as response:
+            result = json.load(response)
+        return result["choices"][0]["message"]["content"]
 
     try:
-        return await asyncio.to_thread(_run_request)
-    except Exception as e:
-        logger.error(f"Gemini API chyba: {e}")
-        raise HTTPException(status_code=500, detail=f"Gemini API selhalo: {e}")
+        return await asyncio.to_thread(_request)
+    except urllib.error.HTTPError as exc:
+        logger.error("OpenAI API HTTP status: %s", exc.code)
+        raise HTTPException(status_code=502, detail="AI služba odmítla požadavek. Zkontrolujte API klíč a kredit.")
+    except Exception:
+        logger.exception("OpenAI API request failed")
+        raise HTTPException(status_code=502, detail="AI služba je dočasně nedostupná.")
+
 
 class MaterialPriceIn(BaseModel):
     name: str
