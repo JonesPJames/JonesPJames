@@ -591,7 +591,7 @@ class GenerateVariantsIn(BaseModel):
 async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends(get_current_user)):
     base = float(payload.cena_material + payload.cena_prace + payload.cena_doprava)
     if base <= 0:
-        base = 50000.0
+        raise HTTPException(status_code=422, detail="Pro výpočet nabídky vyplňte alespoň jednu cenu. Bez podkladů nelze cenu odhadovat.")
 
     narocnost_mult = {"nizka": 1.00, "stredni": 1.04, "vysoka": 1.10}[payload.narocnost]
     urgence_mult = {"bezna": 1.00, "zvysena": 1.06, "expresni": 1.15}[payload.urgence]
@@ -659,8 +659,28 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
         f"V popisu varianty C vysvětli, v čem dává smysl těch +{diff_c_pct} % oproti B "
         f"(prémiové značkové materiály, dlouhá záruka, prioritní termín)."
     )
+    import json
     try:
-        out = await _llm_call(sys, prompt)
+        try:
+            out = await _llm_call(sys, prompt)
+        except HTTPException as exc:
+            if exc.status_code not in (502, 503):
+                raise
+            # Development fallback: transparent, deterministic quote drafts.
+            # Never invent technical specifications, quantities or materials.
+            logger.warning("AI unavailable; generating transparent offline quote drafts")
+            out = json.dumps([
+                {
+                    "nazev": name,
+                    "rozsah": payload.description.strip() or payload.title.strip(),
+                    "zaruka": "K dohodě dle smlouvy",
+                    "termin": "Bude upřesněn",
+                    "included": ["Rozsah dle zadání zákazníka"],
+                    "excluded": ["Práce a materiály neuvedené v zadání"],
+                    "popis": "Orientační kalkulace bez AI. Rozsah, ceny a termíny vyžadují kontrolu řemeslníkem."
+                }
+                for name in ("Základní", "Zlatá střední cesta", "Premium")
+            ], ensure_ascii=False)
         import json, re
         m = re.search(r"\[.*\]", out, re.S)
         if not m:
