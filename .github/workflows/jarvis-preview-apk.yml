@@ -6,6 +6,7 @@ on:
       - work/jarvis-sop-api-20261014
     paths:
       - '.github/workflows/jarvis-preview-apk.yml'
+      - 'frontend/**'
 jobs:
   build:
     runs-on: ubuntu-latest
