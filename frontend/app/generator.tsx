@@ -56,7 +56,7 @@ export default function Generator() {
   const [bundle, setBundle] = useState<any>(null);
 
   function set(k: keyof typeof form, v: string) {
-    setForm({ ...form, [k]: v });
+    setForm((prev) => ({ ...prev, [k]: v }));
   }
 
   async function aiEnhance() {
@@ -78,9 +78,9 @@ export default function Generator() {
     try {
       const payload = {
         ...form,
-        cena_material: parseFloat(form.cena_material) || 0,
-        cena_prace: parseFloat(form.cena_prace) || 0,
-        cena_doprava: parseFloat(form.cena_doprava) || 0,
+        cena_material: parseFloat(form.cena_material.replace(",", ".")) || 0,
+        cena_prace: parseFloat(form.cena_prace.replace(",", ".")) || 0,
+        cena_doprava: parseFloat(form.cena_doprava.replace(",", ".")) || 0,
       };
       const r = await api.post("/ai/generate-variants", payload);
       setBundle(r.data);
@@ -109,13 +109,13 @@ export default function Generator() {
             <Field label="Adresa" value={form.address} onChangeText={(v) => set("address", v)} testID="g-address" />
             <View style={{ flexDirection: "row", gap: 8 }}>
               <View style={{ flex: 1 }}>
-                <Field label="Cena materiálu (Kč)" value={form.cena_material} onChangeText={(v) => set("cena_material", v)} keyboardType="numeric" testID="g-material" />
+                <Field label="Cena materiálu (Kč)" value={form.cena_material} onChangeText={(v) => set("cena_material", v)} keyboardType="decimal-pad" testID="g-material" />
               </View>
               <View style={{ flex: 1 }}>
-                <Field label="Cena práce (Kč)" value={form.cena_prace} onChangeText={(v) => set("cena_prace", v)} keyboardType="numeric" testID="g-prace" />
+                <Field label="Cena práce (Kč)" value={form.cena_prace} onChangeText={(v) => set("cena_prace", v)} keyboardType="decimal-pad" testID="g-prace" />
               </View>
             </View>
-            <Field label="Doprava (Kč)" value={form.cena_doprava} onChangeText={(v) => set("cena_doprava", v)} keyboardType="numeric" testID="g-doprava" />
+            <Field label="Doprava (Kč)" value={form.cena_doprava} onChangeText={(v) => set("cena_doprava", v)} keyboardType="decimal-pad" testID="g-doprava" />
 
             <Field
               label="Přesné zadání zakázky"
