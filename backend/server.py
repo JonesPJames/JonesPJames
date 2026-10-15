@@ -1585,8 +1585,8 @@ async def startup():
             "logo_path": "",
             "created_at": now_utc(),
         })
-    elif not verify_password(admin_pass, existing["password_hash"]):
-        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pass)}})
+    # Never overwrite an existing owner password during application startup.
+    # Password changes must use an authenticated or verified reset flow.
 
 from jarvis_integration import create_router as create_jarvis_integration_router
 app.include_router(create_jarvis_integration_router(db, get_current_user), prefix="/api")
