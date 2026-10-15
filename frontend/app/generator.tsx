@@ -95,7 +95,12 @@ export default function Generator() {
     if (!bundle?.id) return;
     const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
     const token = await AsyncStorage.getItem("rp_token");
-    Linking.openURL(`${pdfUrl(`/api/quote-variants/${bundle.id}/pdf`)}?token=${token || ""}`);
+    if (!token) { Alert.alert("PDF", "Nejste přihlášeni. Přihlaste se znovu."); return; }
+    try {
+      await Linking.openURL(`${pdfUrl(`/api/quote-variants/${bundle.id}/pdf`)}?token=${encodeURIComponent(token)}`);
+    } catch {
+      Alert.alert("PDF", "Nepodařilo se otevřít PDF. Zkuste to znovu.");
+    }
   }
 
   return (
