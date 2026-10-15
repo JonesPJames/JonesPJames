@@ -86,7 +86,7 @@ export default function Denik() {
       quality: 0.6,
     });
     if (!r.canceled && r.assets[0]?.base64) {
-      setDraft({ ...draft, photo_base64: `data:image/jpeg;base64,${r.assets[0].base64}` });
+      setDraft((prev) => ({ ...prev, photo_base64: `data:image/jpeg;base64,${r.assets[0].base64}` }));
     }
   }
 
@@ -114,17 +114,17 @@ export default function Denik() {
 
           <Text style={styles.sectionTitle}>Přidat denní záznam</Text>
           <View style={styles.section}>
-            <Field label="Datum (RRRR-MM-DD)" value={draft.date} onChangeText={(t) => setDraft({ ...draft, date: t })} testID="d-date" />
-            <Field label="Popis prací" value={draft.work} onChangeText={(t) => setDraft({ ...draft, work: t })} multiline testID="d-work" />
+            <Field label="Datum (RRRR-MM-DD)" value={draft.date} onChangeText={(t) => setDraft((prev) => ({ ...prev, date: t }))} testID="d-date" />
+            <Field label="Popis prací" value={draft.work} onChangeText={(t) => setDraft((prev) => ({ ...prev, work: t }))} multiline testID="d-work" />
             <View style={{ flexDirection: "row", gap: 10 }}>
               <View style={{ flex: 1 }}>
-                <Field label="Počasí" value={draft.weather} onChangeText={(t) => setDraft({ ...draft, weather: t })} testID="d-weather" />
+                <Field label="Počasí" value={draft.weather} onChangeText={(t) => setDraft((prev) => ({ ...prev, weather: t }))} testID="d-weather" />
               </View>
               <View style={{ flex: 1 }}>
-                <Field label="Pracovníci" value={draft.workers} onChangeText={(t) => setDraft({ ...draft, workers: t })} testID="d-workers" />
+                <Field label="Pracovníci" value={draft.workers} onChangeText={(t) => setDraft((prev) => ({ ...prev, workers: t }))} testID="d-workers" />
               </View>
             </View>
-            <Field label="Poznámky" value={draft.notes} onChangeText={(t) => setDraft({ ...draft, notes: t })} multiline testID="d-notes" />
+            <Field label="Poznámky" value={draft.notes} onChangeText={(t) => setDraft((prev) => ({ ...prev, notes: t }))} multiline testID="d-notes" />
             <TouchableOpacity onPress={pickPhoto} style={styles.photoBtn} testID="pick-photo">
               <Ionicons name="camera" size={18} color={theme.colors.primary} />
               <Text style={styles.photoBtnText}>{draft.photo_base64 ? "Změnit fotku" : "Přidat fotografii"}</Text>
