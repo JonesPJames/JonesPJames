@@ -183,9 +183,9 @@ export default function ZakazkaDetail() {
     const url = pdfUrl(`/api/jobs/${id}/pdf`);
     try {
       const token = await (await import("@react-native-async-storage/async-storage")).default.getItem("rp_token");
-      Linking.openURL(`${url}?token=${token}`);
+      await Linking.openURL(`${url}?token=${encodeURIComponent(token || "")}`);
     } catch {
-      Linking.openURL(url);
+      Alert.alert("PDF", "Nepodařilo se otevřít PDF. Přihlaste se znovu a zkuste to opakovat.");
     }
   }
 
