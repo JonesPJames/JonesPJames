@@ -1,8 +1,9 @@
-"""Independent read-only JARVIS integration for Remeslnik Pro."""
+"""Tenant-scoped JARVIS integration for Remeslnik Pro."""
 import os
 import jwt
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel, Field
 
 def create_router(db, get_current_user):
     router = APIRouter(prefix="/integrations/jarvis", tags=["jarvis-integration"])
@@ -39,6 +40,19 @@ def create_router(db, get_current_user):
              "iat": now, "exp": now + timedelta(minutes=15)},
             secret, algorithm="HS256")
         return {"access_token": token, "token_type": "bearer", "expires_in": 900}
+
+    class ClientCreate(BaseModel):
+        name: str = Field(min_length=1, max_length=200)
+        phone: str = ""
+        email: str = ""
+
+    @router.post("/clients", status_code=201)
+    async def create_client(payload: ClientCreate, authorization: str = Header(default="")):
+        user = await owner(authorization)
+        from uuid import uuid4
+        doc = {"id": str(uuid4()), "user_id": user["id"], **payload.model_dump()}
+        await db.clients.insert_one(doc)
+        return {key: value for key, value in doc.items() if key != "_id"}
 
     @router.get("/jobs")
     async def list_jobs(authorization: str = Header(default="")):
