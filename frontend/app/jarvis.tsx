@@ -31,10 +31,12 @@ function parseClientCreation(text: string): ClientDraft | null {
 }
 
 function findName(query: string, value: string): boolean {
-  const clean = (v: string) => v.toLocaleLowerCase("cs").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const q = clean(query).replace(/^(pana|paní|pan)\s+/, "").trim();
-  const name = clean(value);
-  return name.includes(q) || name.split(/\s+/).some(word => word.length >= 4 && q.startsWith(word.slice(0, -1)));
+  const clean = (v: string) => v.toLocaleLowerCase("cs").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").trim();
+  const q = clean(query).replace(/^(pana|pani|pan)\s+/, "").trim();
+  const tokens = clean(value).split(/\s+/).filter(Boolean);
+  const terms = q.split(/\s+/).filter(Boolean);
+  if (!terms.length) return false;
+  return terms.every(term => tokens.some(token => token === term || (term.length >= 5 && token.length >= 5 && term.slice(0, 4) === token.slice(0, 4))));
 }
 
 export default function JarvisScreen() {
