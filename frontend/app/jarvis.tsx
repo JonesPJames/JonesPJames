@@ -21,9 +21,13 @@ function parseClientCreation(text: string): ClientDraft | null {
   const match = text.trim().match(/^(?:založ|vytvoř|přidej)\s+(?:nového\s+|novou\s+)?klienta?\s*[.:,-]?\s*(.+)$/i);
   if (!match) return null;
   const parts = match[1].split(",").map(x => x.trim()).filter(Boolean);
-  const words = (parts[0] || "").split(/\s+/).filter(Boolean);
+  const name = (parts.shift() || "").replace(/^(?:pana|paní|pan|paního)\s+/i, "").trim();
+  const words = name.split(/\s+/).filter(Boolean);
   if (words.length !== 2) return null;
-  return { last_name: words[0], first_name: words[1], city: parts.slice(1).join(", ") };
+  const honorific = /^(?:pana|paní|pan)\s+/i.test(match[1]);
+  const first_name = honorific ? words[0] : words[1];
+  const last_name = honorific ? words[1] : words[0];
+  return { first_name, last_name, city: parts.join(", ") };
 }
 
 export default function JarvisScreen() {
