@@ -384,6 +384,33 @@ async def update_me(payload: dict, user: dict = Depends(get_current_user)):
     return public_user(fresh)
 
 # ---------- Jobs ----------
+class ClientCreate(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    city: str = Field(default="", max_length=200)
+
+@api.post("/clients")
+async def create_client(payload: ClientCreate, user: dict = Depends(get_current_user)):
+    first_name = payload.first_name.strip()
+    last_name = payload.last_name.strip()
+    city = payload.city.strip()
+    if not first_name or not last_name:
+        raise HTTPException(status_code=422, detail="Jméno a příjmení jsou povinné")
+    existing = await db.clients.find_one({"user_id": user["id"], "first_name_key": first_name.casefold(), "last_name_key": last_name.casefold(), "city_key": city.casefold()})
+    if existing:
+        raise HTTPException(status_code=409, detail="Klient již existuje")
+    item = {"id": str(uuid.uuid4()), "user_id": user["id"], "first_name": first_name,
+            "last_name": last_name, "city": city, "first_name_key": first_name.casefold(),
+            "last_name_key": last_name.casefold(), "city_key": city.casefold(),
+            "created_at": now_utc()}
+    await db.clients.insert_one(item)
+    return {"id": item["id"], "first_name": first_name, "last_name": last_name, "city": city}
+
+@api.get("/clients")
+async def list_clients(user: dict = Depends(get_current_user)):
+    cursor = db.clients.find({"user_id": user["id"]}, {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "city": 1}).sort("created_at", -1)
+    return [item async for item in cursor]
+
 @api.post("/jobs")
 async def create_job(payload: JobCreate, user: dict = Depends(get_current_user)):
     job_id = str(uuid.uuid4())
