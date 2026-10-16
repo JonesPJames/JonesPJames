@@ -129,7 +129,7 @@ export default function JarvisScreen() {
         <Text style={styles.status}>{connected ? "Připojeno k zakázkám" : "Připojení se ověří při dotazu"}</Text>
         <Text style={styles.label}>Na co se chcete zeptat?</Text>
         <TextInput style={styles.input} value={message} onChangeText={setMessage} multiline
-          placeholder="Například: Kolik mám zakázek?" maxLength={1000} editable={!busy} />
+          placeholder="Například: Otevři zakázku nebo najdi klienta" maxLength={1000} editable={!busy} />
         <TouchableOpacity onPress={ask} disabled={busy || !message.trim()} style={[styles.button, busy && styles.disabled]}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Odeslat dotaz</Text>}
         </TouchableOpacity>
