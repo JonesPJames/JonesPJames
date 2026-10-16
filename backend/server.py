@@ -662,6 +662,8 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
     import json
     try:
         try:
+            if os.environ.get("AI_PROVIDER", "offline").lower() == "offline":
+                raise HTTPException(status_code=503, detail="Offline režim nabídek")
             out = await _llm_call(sys, prompt)
         except HTTPException as exc:
             if exc.status_code not in (502, 503):
@@ -698,8 +700,8 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
             v["cena_kc"] = float(prices[i])
             v["nazev"] = v.get("nazev") or defaults_nazev[i]
             v["rozsah"] = v.get("rozsah", "")
-            v["zaruka"] = v.get("zaruka") or ["24 měsíců", "36 měsíců", "48 měsíců"][i]
-            v["termin"] = v.get("termin") or ["4-6 týdnů", "3-5 týdnů", "2-4 týdny (priorita)"][i]
+            v["zaruka"] = v.get("zaruka") or "Dle smlouvy"
+            v["termin"] = v.get("termin") or "Bude upřesněn"
             v["included"] = v.get("included") or []
             v["excluded"] = v.get("excluded") or []
             v["popis"] = v.get("popis", "")
@@ -726,9 +728,9 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
                 if "rok" in z.lower() or "let" in z.lower():
                     months = months * 12
                 if months > 48:
-                    v["zaruka"] = warranty_defaults[i]
+                    v["zaruka"] = "Dle smlouvy"
             else:
-                v["zaruka"] = warranty_defaults[i]
+                v["zaruka"] = v.get("zaruka") or "Dle smlouvy"
 
         bundle_id = str(uuid.uuid4())
         await db.quote_variants.insert_one({
