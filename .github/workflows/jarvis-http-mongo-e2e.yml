@@ -1,0 +1,35 @@
+name: JARVIS HTTP Mongo E2E
+on:
+  push:
+    branches:
+      - work/jarvis-sop-api-20261014
+    paths:
+      - 'backend/jarvis_integration.py'
+      - 'backend/tests/test_jarvis_http_mongo_e2e.py'
+      - '.github/workflows/jarvis-http-mongo-e2e.yml'
+  workflow_dispatch:
+jobs:
+  http-mongo-e2e:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_MONGO_URL: mongodb://localhost:27017
+      PYTHONPATH: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated test dependencies
+        run: pip install fastapi==0.115.0 pydantic==2.12.5 motor==3.3.1 pymongo==4.5.0 PyJWT==2.12.1 httpx==0.28.1 pytest pytest-asyncio
+      - name: Verify HTTP Mongo E2E
+        run: pytest -q backend/tests/test_jarvis_http_mongo_e2e.py
