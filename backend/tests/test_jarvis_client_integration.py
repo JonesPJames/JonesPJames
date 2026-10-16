@@ -79,3 +79,52 @@ def test_client_create_list_duplicate_and_tenant_isolation():
     except HTTPError as exc:
         assert exc.status_code == 409
     assert len(collection.items) == 1
+
+
+def test_job_create_list_and_tenant_isolation():
+    collection = FakeCollection()
+    scope = {
+        "db": SimpleNamespace(jobs=collection),
+        "uuid": SimpleNamespace(uuid4=uuid4),
+        "now_utc": lambda: datetime.now(timezone.utc),
+        "Depends": lambda x: None,
+        "get_current_user": lambda: None,
+        "next_job_number": lambda user_id: asyncio.sleep(0, result="2026-001"),
+        "serialize_job": lambda item: {k: v for k, v in item.items() if k != "_id"},
+    }
+    create = load_endpoint("create_job", scope)
+    listing = load_endpoint("list_jobs", scope)
+    payload = SimpleNamespace(
+        client_name="Jiří Boček", title="Rekonstrukce koupelny", address="Praha 9",
+        prace=[], material=[], doprava=[],
+    )
+    result = asyncio.run(create(payload, {"id": "tenant-a"}))
+    assert result["client_name"] == "Jiří Boček"
+    assert result["status"] == "rozpracovano"
+    assert len(asyncio.run(listing({"id": "tenant-a"}))) == 1
+    assert asyncio.run(listing({"id": "tenant-b"})) == []
+    assert collection.items[0]["user_id"] == "tenant-a"
+
+
+def test_job_create_preserves_material_quantities():
+    collection = FakeCollection()
+    scope = {
+        "db": SimpleNamespace(jobs=collection),
+        "uuid": SimpleNamespace(uuid4=uuid4),
+        "now_utc": lambda: datetime.now(timezone.utc),
+        "Depends": lambda x: None,
+        "get_current_user": lambda: None,
+        "next_job_number": lambda user_id: asyncio.sleep(0, result="2026-002"),
+        "serialize_job": lambda item: item,
+    }
+    create = load_endpoint("create_job", scope)
+    material = SimpleNamespace(model_dump=lambda: {
+        "nazev": "Sádrokarton", "mnozstvi": 12.5, "jednotka": "m2", "cena": 0,
+    })
+    payload = SimpleNamespace(
+        client_name="Jiří Boček", title="Koupelna", address="Praha 9",
+        prace=[], material=[material], doprava=[],
+    )
+    result = asyncio.run(create(payload, {"id": "tenant-a"}))
+    assert result["material"][0]["mnozstvi"] == 12.5
+    assert collection.items[0]["material"][0]["nazev"] == "Sádrokarton"
