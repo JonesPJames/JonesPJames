@@ -30,6 +30,13 @@ function parseClientCreation(text: string): ClientDraft | null {
   return { first_name, last_name, city: parts.join(", ") };
 }
 
+function findName(query: string, value: string): boolean {
+  const clean = (v: string) => v.toLocaleLowerCase("cs").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const q = clean(query).replace(/^(pana|paní|pan)\s+/, "").trim();
+  const name = clean(value);
+  return name.includes(q) || name.split(/\s+/).some(word => word.length >= 4 && q.startsWith(word.slice(0, -1)));
+}
+
 export default function JarvisScreen() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
