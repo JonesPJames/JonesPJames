@@ -15,6 +15,17 @@ function parseJobCreation(text: string): string | null {
   return name.length >= 2 && name.length <= 120 ? name : null;
 }
 
+type ClientDraft = { first_name: string; last_name: string; city: string };
+
+function parseClientCreation(text: string): ClientDraft | null {
+  const match = text.trim().match(/^(?:založ|vytvoř|přidej)\s+(?:nového\s+|novou\s+)?klienta?\s*[.:,-]?\s*(.+)$/i);
+  if (!match) return null;
+  const parts = match[1].split(",").map(x => x.trim()).filter(Boolean);
+  const words = (parts[0] || "").split(/\s+/).filter(Boolean);
+  if (words.length !== 2) return null;
+  return { last_name: words[0], first_name: words[1], city: parts.slice(1).join(", ") };
+}
+
 export default function JarvisScreen() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -41,8 +52,28 @@ export default function JarvisScreen() {
     } finally { setBusy(false); }
   }
 
+  async function createClient(client: ClientDraft) {
+    setBusy(true);
+    try {
+      await api.post("/clients", client);
+      setAnswer("Klient " + client.first_name + " " + client.last_name + " byl založen." +
+        (client.city ? " Obec: " + client.city + "." : ""));
+    } catch {
+      Alert.alert("Chyba", "Založení klienta selhalo. Před opakováním ověřte seznam klientů.");
+    } finally { setBusy(false); }
+  }
+
   async function ask() {
     if (!message.trim() || busy) return;
+    const client = parseClientCreation(message);
+    if (client) {
+      Alert.alert("Založit klienta?", client.first_name + " " + client.last_name +
+        (client.city ? "\nObec: " + client.city : ""), [
+        { text: "Zrušit", style: "cancel" },
+        { text: "Potvrdit", onPress: () => { void createClient(client); } },
+      ]);
+      return;
+    }
     const newClient = parseJobCreation(message);
     if (newClient) {
       Alert.alert("Potvrzení nové zakázky", "Založit rozpracovanou zakázku pro " + newClient + "?", [
@@ -99,7 +130,7 @@ export default function JarvisScreen() {
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Odeslat dotaz</Text>}
         </TouchableOpacity>
         {answer ? <View style={styles.answer}><Text style={styles.label}>Odpověď JARVIS</Text><Text style={styles.answerText}>{answer}</Text></View> : null}
-        <Text style={styles.note}>Příkaz k vytvoření zakázky vyžaduje potvrzení. Ostatní dotazy pouze čtou ověřená data.</Text>
+        <Text style={styles.note}>Založení klienta a zakázky vyžaduje potvrzení. Ostatní dotazy pouze čtou ověřená data.</Text>
       </ScrollView>
     </SafeAreaView>
   );
