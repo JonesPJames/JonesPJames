@@ -3,7 +3,30 @@ import os
 import jwt
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Header, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+class ClientCreate(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    city: str = Field(default="", max_length=200)
+
+class LineItem(BaseModel):
+    popis: str = Field(min_length=1)
+    mnozstvi: float = Field(gt=0)
+    jednotka: str = "ks"
+    cena: float = Field(ge=0)
+
+    @field_validator("mnozstvi", "cena", mode="before")
+    @classmethod
+    def comma_decimal(cls, value):
+        return value.replace(",", ".") if isinstance(value, str) else value
+
+class JobCreate(BaseModel):
+    client_name: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    address: str = ""
+    material: list[LineItem] = Field(default_factory=list)
+
 
 def create_router(db, get_current_user):
     router = APIRouter(prefix="/integrations/jarvis", tags=["jarvis-integration"])
@@ -41,11 +64,6 @@ def create_router(db, get_current_user):
             secret, algorithm="HS256")
         return {"access_token": token, "token_type": "bearer", "expires_in": 900}
 
-    class ClientCreate(BaseModel):
-        first_name: str = Field(min_length=1, max_length=100)
-        last_name: str = Field(min_length=1, max_length=100)
-        city: str = Field(default="", max_length=200)
-
     @router.post("/clients", status_code=201)
     async def create_client(payload: ClientCreate, authorization: str = Header(default="")):
         user = await owner(authorization)
@@ -68,23 +86,6 @@ def create_router(db, get_current_user):
         cursor = db.clients.find({"user_id": user["id"]},
                                  {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "city": 1})
         return {"clients": [item async for item in cursor]}
-
-    class LineItem(BaseModel):
-        popis: str = Field(min_length=1)
-        mnozstvi: float = Field(gt=0)
-        jednotka: str = "ks"
-        cena: float = Field(ge=0)
-
-        @__import__("pydantic").field_validator("mnozstvi", "cena", mode="before")
-        @classmethod
-        def comma_decimal(cls, value):
-            return value.replace(",", ".") if isinstance(value, str) else value
-
-    class JobCreate(BaseModel):
-        client_name: str = Field(min_length=1)
-        title: str = Field(min_length=1)
-        address: str = ""
-        material: list[LineItem] = Field(default_factory=list)
 
     @router.post("/jobs", status_code=201)
     async def create_job(payload: JobCreate, authorization: str = Header(default="")):
