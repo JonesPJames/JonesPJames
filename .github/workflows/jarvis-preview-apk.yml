@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install pytest
-      - run: python -m pytest -q backend/tests/test_clients.py backend/tests/test_jarvis_mobile_contract.py
+      - run: python -m pytest -q backend/tests/test_clients.py backend/tests/test_jarvis_mobile_contract.py backend/tests/test_jarvis_client_integration.py
   build:
     needs: backend-test
     runs-on: ubuntu-latest
