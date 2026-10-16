@@ -99,7 +99,7 @@ export default function JarvisScreen() {
 
   async function ask() {
     if (!message.trim() || busy) return;
-    if (lastJob && /^(?:otevři|ukaž|zobraz)(?:\\s+mi)?\\s+(?:ji|ho|to|tu zakázku|poslední zakázku)[.!?]?$/i.test(message.trim())) {
+    if (lastJob && /^(?:otevři|ukaž|zobraz)(?:\s+mi)?\s+(?:ji|ho|to|tu zakázku|poslední zakázku)[.!?]?$/i.test(message.trim())) {
       router.push(("/zakazka/" + lastJob.id) as any);
       setAnswer("Otevírám " + (lastJob.title || lastJob.client_name) + ".");
       return;
