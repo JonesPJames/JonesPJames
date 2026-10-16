@@ -44,6 +44,7 @@ export default function JarvisScreen() {
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [lastJob, setLastJob] = useState<{ id: string; client_name: string; title: string } | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -81,6 +82,7 @@ export default function JarvisScreen() {
       const jobs = Array.isArray(response.data) ? response.data : response.data.jobs || [];
       const found = jobs.filter((job: any) => findName(name, job.client_name || ""));
       if (found.length === 1) {
+        setLastJob({ id: found[0].id, client_name: found[0].client_name || "", title: found[0].title || "" });
         router.push(("/zakazka/" + found[0].id) as any);
         setAnswer("Otevírám zakázku pro " + found[0].client_name);
       } else if (found.length > 1) {
@@ -95,6 +97,11 @@ export default function JarvisScreen() {
 
   async function ask() {
     if (!message.trim() || busy) return;
+    if (lastJob && /^(?:otevři|ukaž|zobraz)(?:\\s+mi)?\\s+(?:ji|ho|to|tu zakázku|poslední zakázku)[.!?]?$/i.test(message.trim())) {
+      router.push(("/zakazka/" + lastJob.id) as any);
+      setAnswer("Otevírám " + (lastJob.title || lastJob.client_name) + ".");
+      return;
+    }
     const open = message.trim().match(/^(?:otevři|najdi|ukaž|zobraz)(?:\s+mi)?\s+(?:(?:zakázku|pana|paní|u)\s+)*(.+)$/i);
     if (open) { await openByName(open[1]); return; }
     const client = parseClientCreation(message);
