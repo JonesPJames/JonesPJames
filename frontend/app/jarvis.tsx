@@ -107,6 +107,10 @@ export default function JarvisScreen() {
     const open = message.trim().match(/^(?:otevři|najdi|ukaž|zobraz)(?:\s+mi)?\s+(?:(?:zakázku|pana|paní|u)\s+)*(.+)$/i);
     if (open) { await openByName(open[1]); return; }
     const client = parseClientCreation(message);
+    if (client && /(?:ho|mu|ovi)$/i.test(client.first_name) && /(?:a|u|e)$/i.test(client.last_name)) {
+      Alert.alert("Upřesnění jména", "Jméno je pravděpodobně ve skloňovaném tvaru. Pro bezpečné založení zadejte jméno a příjmení v 1. pádě. Klient nebyl vytvořen.");
+      return;
+    }
     if (client) {
       Alert.alert("Založit klienta?", client.first_name + " " + client.last_name +
         (client.city ? "\nObec: " + client.city : ""), [
