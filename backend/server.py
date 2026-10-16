@@ -490,10 +490,12 @@ async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) 
     import json
     import urllib.error
 
-    key = os.environ.get("OPENAI_API_KEY", "").strip()
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not key:
-        raise HTTPException(status_code=503, detail="AI zatím není aktivována. Nastavte OPENAI_API_KEY v Railway.")
-    model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
+        raise HTTPException(status_code=503, detail="AI zatím není aktivována. Nastavte OPENROUTER_API_KEY v Railway.")
+    model = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
+    if model != "openrouter/free" and not model.endswith(":free"):
+        raise HTTPException(status_code=503, detail="Only free AI models are permitted")
     body = json.dumps({
         "model": model,
         "messages": [
@@ -505,12 +507,12 @@ async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) 
 
     def _request():
         request = urllib.request.Request(
-            "https://api.openai.com/v1/chat/completions",
+            "https://openrouter.ai/api/v1/chat/completions",
             data=body,
             headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=45) as response:
+        with urllib.request.urlopen(request, timeout=20) as response:
             result = json.load(response)
         return result["choices"][0]["message"]["content"]
 
@@ -662,7 +664,7 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
     import json
     try:
         try:
-            if os.environ.get("AI_PROVIDER", "offline").lower() == "offline":
+            if os.environ.get("AI_PROVIDER", "openrouter").lower() == "offline":
                 raise HTTPException(status_code=503, detail="Offline režim nabídek")
             out = await _llm_call(sys, prompt)
         except HTTPException as exc:
