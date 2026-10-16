@@ -74,8 +74,29 @@ export default function JarvisScreen() {
     } finally { setBusy(false); }
   }
 
+  async function openByName(name: string) {
+    setBusy(true);
+    try {
+      const response = await api.get("/jobs");
+      const jobs = Array.isArray(response.data) ? response.data : response.data.jobs || [];
+      const found = jobs.filter((job: any) => findName(name, job.client_name || ""));
+      if (found.length === 1) {
+        router.push(("/zakazka/" + found[0].id) as any);
+        setAnswer("Otevírám zakázku pro " + found[0].client_name);
+      } else if (found.length > 1) {
+        setAnswer("Našel jsem více zakázek: " + found.map((j: any) => j.title || j.client_name).join("; ") + ". Upřesni výběr.");
+      } else {
+        setAnswer("Nenašel jsem odpovídající zakázku pro " + name + ".");
+      }
+    } catch {
+      setAnswer("Vyhledání zakázky se nezdařilo.");
+    } finally { setBusy(false); }
+  }
+
   async function ask() {
     if (!message.trim() || busy) return;
+    const open = message.trim().match(/^(?:otevři|najdi|ukaž|zobraz)(?:\s+mi)?\s+(?:(?:zakázku|pana|paní|u)\s+)*(.+)$/i);
+    if (open) { await openByName(open[1]); return; }
     const client = parseClientCreation(message);
     if (client) {
       Alert.alert("Založit klienta?", client.first_name + " " + client.last_name +
