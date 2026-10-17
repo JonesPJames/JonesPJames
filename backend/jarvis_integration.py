@@ -19,7 +19,9 @@ class LineItem(BaseModel):
     @field_validator("mnozstvi", "cena", mode="before")
     @classmethod
     def comma_decimal(cls, value):
-        return value.replace(",", ".") if isinstance(value, str) else value
+        if isinstance(value, str):
+            return value.strip().replace(",", ".")
+        return value
 
 class JobCreate(BaseModel):
     client_name: str = Field(min_length=1)
