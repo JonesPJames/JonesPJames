@@ -16,6 +16,8 @@ Datum: 17. 10. 2026. Zdroj: `JonesPJames/JonesPJames`, vývojová větev `work/j
 
 Release varianta ve workflow je pouze interní testovací build. Expo prebuild generuje podpis testovacím debug klíčem; produkční podpis, identita aplikace ani keystore se nemění. Stávající applicationId `com.jpjones.remeslnikjarvis.debug` zůstává zachován.
 
+| P1 | První skutečný release build 39058801658 skončil na `:expo-manifests:lintVitalAnalyzeRelease` s `OutOfMemoryError: Metaspace`; vygenerovaná konfigurace má pouze 512 MiB metaspace. | JVM heap 3 GiB, metaspace 2 GiB, nejvýše 2 workers a vypnuté paralelní projekty v CI. Android lint zůstává zapnutý. |
+
 ## Ověření
 
 - Reprodukována chyba TS5103 před opravou; po opravě `npm run typecheck` prochází.
@@ -38,3 +40,9 @@ Release varianta ve workflow je pouze interní testovací build. Expo prebuild g
 8. Výchozí `main` neobsahuje aktuální vývoj JARVIS. PR cílí na aktivní vývojovou větev; sloučení do produkční větve není součástí auditu.
 
 Produkční databáze, prostředí, tajné údaje a nasazení nebyly měněny. Žádný test nevolá živé staging E2E skripty vytvářející účty nebo zakázky.
+
+## Důkazy z nativního sestavení
+
+První release CI 39058801658 úspěšně provedlo `:app:createBundleReleaseJsAndAssets` a zabalilo 1490 modulů do `index.android.bundle`. Následně selhalo při Android lint analýze třetí knihovny na vyčerpání 512 MiB JVM metaspace. Úprava limitů řeší konkrétní resource failure; výsledek opakované kompilace musí potvrdit nové CI. Kontroly lint ani podpisu se nevynechávají.
+
+Samostatný `pip-audit` podpůrného Pro backendu navíc našel 7 zranitelných balíčků (50 odlišných kombinací balíček/advisory po deduplikaci). Patří sem PyMongo, python-jose, python-multipart, Pillow, PyJWT, Starlette a ecdsa. Úplný registr je v backendovém auditním PR `JonesPJames/remeslnik-jarvis#1`; produkční Python verze nebyly tímto mobilním PR měněny.

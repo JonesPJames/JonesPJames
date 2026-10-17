@@ -52,7 +52,8 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace --no-parallel --max-workers=2 \
+            '-Dorg.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8'
       - name: Verify bundled APK and test signature
         run: |
           python3 - <<'PYAPK'
