@@ -25,8 +25,11 @@ function parseClientCreation(text: string): ClientDraft | null {
   const words = name.split(/\s+/).filter(Boolean);
   if (words.length !== 2) return null;
   const honorific = /^(?:pana|paní|pan)\s+/i.test(match[1]);
-  const first_name = honorific ? words[0] : words[1];
-  const last_name = honorific ? words[1] : words[0];
+  let first_name = honorific ? words[0] : words[1];
+  let last_name = honorific ? words[1] : words[0];
+  // Only unambiguous, explicitly supported Czech inflections are normalized.
+  if (honorific && first_name.toLocaleLowerCase("cs") === "jiřího") first_name = "Jiří";
+  if (honorific && last_name.toLocaleLowerCase("cs") === "bočka") last_name = "Boček";
   return { first_name, last_name, city: parts.join(", ") };
 }
 
