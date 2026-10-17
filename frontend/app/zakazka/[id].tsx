@@ -73,6 +73,10 @@ export default function ZakazkaDetail() {
         Alert.prompt("Cena za jednotku", "Zadejte cenu (Kč)", async (price) => {
           await resolve(parseFloat(price || "0") || 0);
         }, "plain-text", "0", "numeric");
+      } else if (Platform.OS === "web") {
+        if (typeof window !== "undefined" && window.confirm("Schválit vícepráce s cenou 0 Kč? Cenu potom nastavte v tabulce Vícepráce v deníku.")) {
+          await resolve(0);
+        }
       } else {
         Alert.alert("Schválit vícepráce?", "Návrh bude schválen s cenou 0 Kč. Cenu potom nastavte v tabulce Vícepráce v deníku.", [
           { text: "Zrušit", style: "cancel" },

@@ -49,7 +49,7 @@ Samostatný `pip-audit` podpůrného Pro backendu navíc našel 7 zranitelných 
 
 ## Navazující opravy
 
-- Opraven výběr dialogu schválení víceprací: React Native vystavuje `Alert.prompt` i na Androidu, implementace ale reaguje jen na iOS. Rozhoduje se nyní podle `Platform.OS`. Android a web nejprve zobrazí potvrzení schválení s nulovou cenou a upozorní na následné doplnění ceny v deníku; iOS zachovává zadání ceny.
-- Čtyři izolované regresní testy spouštějí skutečnou funkci obrazovky s falešným API a dialogy: Android, web, cena na iOS a zamítnutí. Žádná síť ani produkční data.
+- Opraven výběr dialogu schválení víceprací: React Native vystavuje `Alert.prompt` i na Androidu, implementace ale reaguje jen na iOS. Rozhoduje se nyní podle `Platform.OS`. Android (`Alert.alert`) a web (`window.confirm`) nejprve zobrazí potvrzení schválení s nulovou cenou a upozorní na následné doplnění ceny v deníku; iOS zachovává zadání ceny.
+- Pět izolovaných regresních testů spouštějí skutečnou funkci obrazovky s falešným API a dialogy: Android, potvrzení i zrušení na webu, cena na iOS a zamítnutí. Žádná síť ani produkční data.
 - Testy, lint bez varování, TypeScript a Android Hermes export (1490 modulů, ~4,57 MB) po změnách prošly. Nativní ověření aktuálního commitu probíhá samostatně v CI.
 - PostCSS 8.4.49 → 8.5.30 pomocí cíleného npm override. Advisory GHSA-fxqj-rqcc-2cmp uvádí opravu od 8.5.23; `npm audit` již PostCSS nehlásí. Expo SDK, React Native a architektura zůstávají beze změny.

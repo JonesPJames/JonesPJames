@@ -16,10 +16,11 @@ function visit(node) {
 visit(ast);
 assert.ok(handler, 'proposal handler must exist');
 const code = ts.transpileModule(handler.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-function setup(platform) {
+function setup(platform, confirmed = true) {
   const requests = [], alerts = [], prompts = [], jobs = [];
   const context = vm.createContext({
     id: 'job-1', Platform: { OS: platform },
+    window: { confirm: () => confirmed },
     Alert: { alert: (...args) => alerts.push(args), prompt: (...args) => prompts.push(args) },
     api: { post: async (...args) => { requests.push(args); return { data: { id: 'job-1' } }; } },
     setJob: job => jobs.push(job), getApiErrorMessage: err => err.message,
@@ -27,7 +28,7 @@ function setup(platform) {
   vm.runInContext(code, context);
   return { context, requests, alerts, prompts, jobs };
 }
-for (const platform of ['android', 'web']) {
+for (const platform of ['android']) {
   test(`${platform}: approval waits for confirmation and never calls iOS prompt`, async () => {
     const s = setup(platform);
     await s.context.resolveProposal('proposal-1', 'approve');
@@ -58,4 +59,18 @@ test('rejection preserves the existing API contract', async () => {
   assert.equal(s.requests[0][1].cena, 0);
   assert.equal(s.prompts.length, 0);
   assert.equal(s.alerts.length, 0);
+});
+
+test('web: confirmation approves without depending on native Alert callbacks', async () => {
+  const s = setup('web');
+  await s.context.resolveProposal('proposal-1', 'approve');
+  assert.equal(s.prompts.length, 0);
+  assert.equal(s.requests.length, 1);
+  assert.equal(s.requests[0][1].cena, 0);
+});
+test('web: cancelling confirmation sends no request', async () => {
+  const s = setup('web', false);
+  await s.context.resolveProposal('proposal-1', 'approve');
+  assert.equal(s.requests.length, 0);
+  assert.equal(s.jobs.length, 0);
 });
