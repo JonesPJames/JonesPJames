@@ -39,6 +39,7 @@ export default function NovaZakazka() {
   useEffect(() => {
     const pf = consumePrefill();
     if (pf) {
+      if (pf.client_name) setClient(pf.client_name);
       if (pf.title) setTitle(pf.title);
       if (pf.prace?.length) setPrace(pf.prace);
       if (pf.material?.length) setMaterial(pf.material);

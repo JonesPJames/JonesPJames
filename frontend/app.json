@@ -2,7 +2,7 @@
   "expo": {
     "name": "Řemeslník Pro JARVIS",
     "slug": "remeslnik-pro",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "remeslnikpro",
@@ -19,7 +19,8 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.jpjones.remeslnikjarvis.debug",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "versionCode": 2
     },
     "web": {
       "bundler": "metro",

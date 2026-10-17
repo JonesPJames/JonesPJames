@@ -1,27 +1,32 @@
-name: JARVIS mobile TypeScript validation
+name: JARVIS mobile validation
 on:
   push:
     branches: [work/jarvis-sop-api-20261014]
-    paths:
-      - 'frontend/app/jarvis.tsx'
-      - 'frontend/app/home.tsx'
-      - 'frontend/src/api.ts'
-      - 'frontend/src/auth.tsx'
-      - 'frontend/tsconfig.json'
-      - 'frontend/eas.json'
-      - '.github/workflows/jarvis-mobile-validation.yml'
+    paths: ['frontend/**', '.github/workflows/jarvis-mobile-validation.yml']
+  pull_request:
+    branches: [main, work/jarvis-sop-api-20261014]
+    paths: ['frontend/**', '.github/workflows/jarvis-mobile-validation.yml']
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --legacy-peer-deps --no-audit --no-fund
-      - name: Validate new JARVIS screen with TypeScript 6 compatible compiler
-        run: npx --yes -p typescript@6.0.2 tsc --noEmit
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npx expo install --check

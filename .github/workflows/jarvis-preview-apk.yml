@@ -31,7 +31,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --legacy-peer-deps --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
       - name: Verify Expo access
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -44,4 +44,4 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: '1'
-        run: npx eas-cli@latest build --platform android --profile preview --non-interactive --wait
+        run: npx eas-cli@25.1.1 build --platform android --profile preview --non-interactive --wait

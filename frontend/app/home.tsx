@@ -13,7 +13,6 @@ import { useAuth } from "../src/auth";
 import { theme } from "../src/theme";
 import { AppHeader } from "../src/components/AppHeader";
 import { AppFooter } from "../src/components/AppFooter";
-import { HelpIcon } from "../src/components/HelpIcon";
 import {
   OnboardingOverlay,
   shouldShowOnboarding,
@@ -22,7 +21,8 @@ import {
 
 const TILES: { key: string; title: string; subtitle: string; icon: any; href: string; primary?: boolean }[] = [
   { key: "nova", title: "Nová zakázka", subtitle: "Vytvořit cenovou nabídku", icon: "add-outline", href: "/nova-zakazka", primary: true },
-  { key: "adresar", title: "Adresář zakázek", subtitle: "Všechny nabídky a stavy", icon: "folder-outline", href: "/adresar" },
+  { key: "adresar", title: "Adresář zakázek", subtitle: "Posledních 10 zakázek", icon: "folder-outline", href: "/adresar" },
+  { key: "klienti", title: "Adresář klientů", subtitle: "Klienti A–Z a všechny jejich zakázky", icon: "people-outline", href: "/klienti" },
   { key: "kalkulacka", title: "Kalkulačka prací", subtitle: "Ceny dle profese", icon: "calculator-outline", href: "/kalkulacka" },
   { key: "jarvis", title: "JARVIS AI", subtitle: "Asistent pro moje zakázky", icon: "chatbubbles-outline", href: "/jarvis" },
   { key: "generator", title: "Generátor nabídek", subtitle: "AI vytvoří 3 varianty", icon: "sparkles-outline", href: "/generator" },
@@ -37,7 +37,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
-  }, [user, loading]);
+  }, [user, loading, router]);
 
   useEffect(() => {
     (async () => {
