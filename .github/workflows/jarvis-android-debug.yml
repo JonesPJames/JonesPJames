@@ -2,7 +2,12 @@ name: JARVIS Android debug APK (GitHub)
 on:
   push:
     branches: [work/jarvis-sop-api-20261014]
-    paths: ['.github/workflows/jarvis-android-debug.yml', 'frontend/app.json']
+    paths:
+      - '.github/workflows/jarvis-android-debug.yml'
+      - 'frontend/app.json'
+      - 'frontend/app/**'
+      - 'frontend/src/**'
+      - 'frontend/package.json'
   workflow_dispatch:
 jobs:
   android-debug:
