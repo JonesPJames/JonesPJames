@@ -50,6 +50,18 @@ async def test_jarvis_http_mongo_crud(monkeypatch):
             assert stored["material"][0]["mnozstvi"] == 1.5
             assert (await http.post("/integrations/jarvis/jobs/" + job_id + "/materials",
                 headers=b, json={"popis": "Zakázáno", "mnozstvi": 1, "cena": 1})).status_code == 404
+            assert (await http.get("/integrations/jarvis/jobs", headers=b)).json()["count"] == 0
+            assert (await http.post("/integrations/jarvis/jobs/" + job_id + "/materials",
+                headers=a, json={"popis": "Neplatné", "mnozstvi": 0, "cena": 1})).status_code == 422
+            assert (await http.post("/integrations/jarvis/jobs/" + job_id + "/materials",
+                json={"popis": "Bez tokenu", "mnozstvi": 1, "cena": 1})).status_code == 401
+            await database.jobs.update_one({"id": job_id, "user_id": "tenant_a"},
+                {"$set": {"finalized": True}})
+            assert (await http.post("/integrations/jarvis/jobs/" + job_id + "/materials",
+                headers=a, json={"popis": "Uzamčeno", "mnozstvi": 1, "cena": 1})).status_code == 404
+            unchanged = await database.jobs.find_one({"id": job_id, "user_id": "tenant_a"})
+            assert len(unchanged["material"]) == 1
+
     finally:
         await client.drop_database(database.name)
         client.close()
