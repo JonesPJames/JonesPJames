@@ -14,9 +14,9 @@ Datum: 17. 10. 2026. Zdroj: `JonesPJames/JonesPJames`, vývojová větev `work/j
 | P2 | Mobilní CI se nespouštělo na pull requesty a filtry vynechávaly důležité změny. | Pull request spouštěče, všechny frontendové vstupy, omezená oprávnění, časové limity. |
 | P2 | EAS profil neurčuje explicitně APK; CLI se stahovalo přes pohyblivé `latest`. | `android.buildType: apk`; EAS CLI 25.1.1. |
 
-Release varianta ve workflow je pouze interní testovací build. Expo prebuild generuje podpis testovacím debug klíčem; produkční podpis, identita aplikace ani keystore se nemění. Stávající applicationId `com.jpjones.remeslnikjarvis.debug` zůstává zachován.
-
 | P1 | První skutečný release build 39058801658 skončil na `:expo-manifests:lintVitalAnalyzeRelease` s `OutOfMemoryError: Metaspace`; vygenerovaná konfigurace má pouze 512 MiB metaspace. | JVM heap 3 GiB, metaspace 2 GiB, nejvýše 2 workers a vypnuté paralelní projekty v CI. Android lint zůstává zapnutý. |
+
+Release varianta ve workflow je pouze interní testovací build. Expo prebuild generuje podpis testovacím debug klíčem; produkční podpis, identita aplikace ani keystore se nemění. Stávající applicationId `com.jpjones.remeslnikjarvis.debug` zůstává zachován.
 
 ## Ověření
 
