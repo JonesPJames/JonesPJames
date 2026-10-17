@@ -20,7 +20,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - name: Verify preinstalled Android SDK
+        run: |
+          test -d "$ANDROID_HOME" || { echo 'Android SDK not found'; exit 1; }
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms" || true
       - name: Install dependencies
         run: npm install --legacy-peer-deps --no-audit --no-fund
       - name: Generate Android project
