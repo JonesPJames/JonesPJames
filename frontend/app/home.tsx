@@ -13,7 +13,6 @@ import { useAuth } from "../src/auth";
 import { theme } from "../src/theme";
 import { AppHeader } from "../src/components/AppHeader";
 import { AppFooter } from "../src/components/AppFooter";
-import { HelpIcon } from "../src/components/HelpIcon";
 import {
   OnboardingOverlay,
   shouldShowOnboarding,
@@ -37,7 +36,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
-  }, [user, loading]);
+  }, [user, loading, router]);
 
   useEffect(() => {
     (async () => {

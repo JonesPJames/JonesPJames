@@ -28,7 +28,6 @@ type Employee = { id: string; name: string; phone: string; pin: string; active: 
  *  web uses window.confirm because RN-Web's Alert.alert is unreliable for callbacks. */
 function confirmAsync(title: string, message: string): Promise<boolean> {
   if (Platform.OS === "web") {
-    // eslint-disable-next-line no-alert
     return Promise.resolve(typeof window !== "undefined" && window.confirm(`${title}\n\n${message}`));
   }
   return new Promise((resolve) => {
@@ -95,7 +94,6 @@ export default function ZamestnanciScreen() {
     } catch (e: any) {
       const msg = getApiErrorMessage(e);
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        // eslint-disable-next-line no-alert
         window.alert("Chyba: " + msg);
       } else {
         Alert.alert("Chyba", msg);

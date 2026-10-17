@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -36,7 +36,7 @@ export default function Adresar() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     setError("");
     try {
       const r = await api.get("/jobs", { params: { q, status: filter } });
@@ -47,12 +47,12 @@ export default function Adresar() {
       setLoading(false);
       setRefreshing(false);
     }
-  }
+  }, [q, filter]);
 
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [q, filter])
+    }, [load])
   );
 
   return (
