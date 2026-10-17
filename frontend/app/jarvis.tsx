@@ -49,6 +49,7 @@ export default function JarvisScreen() {
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [lastClientId, setLastClientId] = useState<string | null>(null);
   const [lastJob, setLastJob] = useState<{ id: string; client_name: string; title: string } | null>(null);
 
   useEffect(() => {
@@ -72,7 +73,8 @@ export default function JarvisScreen() {
   async function createClient(client: ClientDraft) {
     setBusy(true);
     try {
-      await api.post("/clients", client);
+      const result = await api.post("/clients", client);
+      setLastClientId(result.data.id || null);
       setAnswer("Klient " + client.first_name + " " + client.last_name + " byl založen." +
         (client.city ? " Obec: " + client.city + "." : ""));
     } catch {
@@ -178,6 +180,13 @@ export default function JarvisScreen() {
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Odeslat dotaz</Text>}
         </TouchableOpacity>
         {answer ? <View style={styles.answer}><Text style={styles.label}>Odpověď JARVIS</Text><Text style={styles.answerText}>{answer}</Text></View> : null}
+        {lastClientId ? <TouchableOpacity style={styles.button} accessibilityRole="button"
+          onPress={() => router.push({ pathname: "/klient/[id]", params: { id: lastClientId } })}>
+          <Text style={styles.buttonText}>Otevřít kartu založeného klienta</Text>
+        </TouchableOpacity> : null}
+        <TouchableOpacity onPress={() => router.push("/klienti")} accessibilityRole="button">
+          <Text style={styles.back}>Adresář klientů A–Z</Text>
+        </TouchableOpacity>
         <Text style={styles.note}>Založení klienta a zakázky vyžaduje potvrzení. Ostatní dotazy pouze čtou ověřená data.</Text>
       </ScrollView>
     </SafeAreaView>
