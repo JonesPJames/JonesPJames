@@ -15,11 +15,12 @@ def test_owner_isolation():
     assert 'claims.get("companyId") != claims.get("sub")' in SOURCE
     assert 'audience="remeslnik-pro"' in SOURCE
 
-def test_read_only():
+def test_scoped_reads_and_controlled_writes():
     assert "db.jobs.find(" in SOURCE
     assert "db.jobs.find_one(" in SOURCE
-    assert "db.jobs.update_" not in SOURCE
-    assert "db.jobs.insert_" not in SOURCE
+    assert '{"id": job_id, "user_id": user["id"], "finalized": False}' in SOURCE
+    assert '{"$push": {"material": item}' in SOURCE
+    assert 'if result.matched_count != 1:' in SOURCE
     assert "db.jobs.delete_" not in SOURCE
 
 def test_token_exchange():
