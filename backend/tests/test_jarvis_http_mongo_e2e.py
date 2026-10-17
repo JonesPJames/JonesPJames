@@ -45,6 +45,11 @@ async def test_jarvis_http_mongo_crud(monkeypatch):
                 headers=a, json={"popis": "Barva", "mnozstvi": "1,5", "jednotka": "l", "cena": "25,50"})
             assert material.status_code == 201, material.text
             assert material.json()["mnozstvi"] == 1.5
+            spaced = await http.post("/integrations/jarvis/jobs/" + job_id + "/materials",
+                headers=a, json={"popis": "Písek", "mnozstvi": " 2,5 ", "cena": " 10,25 "})
+            assert spaced.status_code == 201, spaced.text
+            assert spaced.json()["mnozstvi"] == 2.5
+            assert spaced.json()["cena"] == 10.25
             assert material.json()["cena"] == 25.5
             stored = await database.jobs.find_one({"id": job_id, "user_id": "tenant_a"})
             assert stored["material"][0]["mnozstvi"] == 1.5
@@ -60,7 +65,7 @@ async def test_jarvis_http_mongo_crud(monkeypatch):
             assert (await http.post("/integrations/jarvis/jobs/" + job_id + "/materials",
                 headers=a, json={"popis": "Uzamčeno", "mnozstvi": 1, "cena": 1})).status_code == 404
             unchanged = await database.jobs.find_one({"id": job_id, "user_id": "tenant_a"})
-            assert len(unchanged["material"]) == 1
+            assert len(unchanged["material"]) == 2
 
     finally:
         await client.drop_database(database.name)
