@@ -811,7 +811,10 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
 
 # ---------- PDF ----------
 def _czech_currency(n: float) -> str:
-    s = f"{int(round(n)):,}".replace(",", " ")
+    value = round(float(n), 2)
+    s = f"{value:,.2f}".replace(",", " ").replace(".", ",")
+    if s.endswith(",00"):
+        s = s[:-3]
     return f"{s} Kč"
 
 def _czech_date(dt: datetime) -> str:
@@ -832,6 +835,19 @@ def _draw_header_info(canvas, doc, user):
         y -= 10
     if user.get('show_dic') and user.get('dic'):
         canvas.drawString(130*mm, y, f"DIČ: {user['dic']}")
+
+def _draw_pdf_footer(canvas, doc):
+    canvas.saveState()
+    try:
+        canvas.setFont("DejaVu", 8)
+        label = "Vytvořeno Řemeslník Pro"
+    except KeyError:
+        canvas.setFont("Helvetica", 8)
+        label = "Vytvoreno Remeslnik Pro"
+    canvas.setFillColorRGB(0.6, 0.63, 0.67)
+    canvas.drawCentredString(doc.pagesize[0] / 2, 22, label)
+    canvas.restoreState()
+
 
 def _build_pdf_quote(job: dict, user: dict) -> bytes:
     from reportlab.lib.pagesizes import A4
@@ -998,10 +1014,9 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         elems.append(Paragraph(job["payment_note"], small))
         elems.append(Spacer(1, 4))
     elems.append(Paragraph("Nabídka platí 30 dní od data vystavení.", small))
-    elems.append(Spacer(1, 14))
-    elems.append(Paragraph("<font color='#9ca3af'>Vytvořeno Řemeslník Pro ™</font>", small))
 
-    doc.build(elems)
+
+    doc.build(elems, onFirstPage=_draw_pdf_footer, onLaterPages=_draw_pdf_footer)
     return buf.getvalue()
 
 def _build_pdf_billing(job: dict, user: dict) -> bytes:
@@ -1148,10 +1163,9 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     elems.append(Spacer(1, 8))
     if job.get("payment_note"):
         elems.append(Paragraph(job["payment_note"], small))
-    elems.append(Spacer(1, 14))
-    elems.append(Paragraph("<font color='#9ca3af'>Vytvořeno Řemeslník Pro ™</font>", small))
 
-    doc.build(elems)
+
+    doc.build(elems, onFirstPage=_draw_pdf_footer, onLaterPages=_draw_pdf_footer)
     return buf.getvalue()
 
 def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:

@@ -83,3 +83,9 @@ def test_jarvis_visual_is_included_in_pdf_quote():
            'jarvis_description': 'Oprava < a > bez vloženého značení.', 'jarvis_notes': 'Rozsah dle dohody.'}
     pdf = server._build_pdf_quote(job, {'name': 'Dodavatel'})
     assert b'/Subtype /Image' in pdf
+
+
+def test_pdf_currency_preserves_vat_precision():
+    assert server._czech_currency(9873.6) == '9 873,60 Kč'
+    assert server._czech_currency(4232.58) == '4 232,58 Kč'
+    assert server._czech_currency(1000) == '1 000 Kč'
