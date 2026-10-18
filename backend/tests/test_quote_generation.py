@@ -62,3 +62,24 @@ def test_generate_variants_recovers_and_exports_pdf(monkeypatch, output, expecte
     pdf = server._build_pdf_variants(result['variants'], payload.model_dump(), {'name': 'Řemeslník Peťas'})
     assert pdf.startswith(b'%PDF-')
 
+
+
+@pytest.mark.parametrize('vat,expected,advance', [(False, 1000, 300), (True, 1210, 363)])
+def test_jarvis_vat_is_consistent_in_totals_and_quote(vat, expected, advance):
+    job = {'id': 'vat-test', 'job_number': '2026-900', 'title': 'Montáž', 'client_name': 'Test',
+           'platce_dph': vat, 'prace': [{'popis': 'Montáž', 'mnozstvi': 2, 'cena': 500, 'jednotka': 'hod'}]}
+    totals = server.compute_totals(job)
+    assert totals['celkem'] == expected
+    assert totals['zaloha'] == advance
+    assert totals['dph_21'] == (210 if vat else 0)
+    assert server._build_pdf_quote({**job, 'totals': totals}, {'name': 'Dodavatel'}).startswith(b'%PDF-')
+    assert server._build_pdf_billing({**job, 'totals': totals}, {'name': 'Dodavatel'}).startswith(b'%PDF-')
+
+
+def test_jarvis_visual_is_included_in_pdf_quote():
+    import base64
+    visual = 'data:image/png;base64,' + base64.b64encode(png_bytes()).decode()
+    job = {'id': 'visual-test', 'job_number': '2026-901', 'title': 'Oprava', 'jarvis_visual': visual,
+           'jarvis_description': 'Oprava < a > bez vloženého značení.', 'jarvis_notes': 'Rozsah dle dohody.'}
+    pdf = server._build_pdf_quote(job, {'name': 'Dodavatel'})
+    assert b'/Subtype /Image' in pdf

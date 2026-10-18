@@ -225,6 +225,7 @@ class LineItem(BaseModel):
         return clean_comma_float(v)
 
 class JobBase(BaseModel):
+    platce_dph: bool = False
     client_name: str = ""
     address: str = ""
     title: str = ""
@@ -236,6 +237,7 @@ class JobCreate(JobBase):
     pass
 
 class JobUpdate(BaseModel):
+    platce_dph: Optional[bool] = None
     client_name: Optional[str] = None
     address: Optional[str] = None
     title: Optional[str] = None
@@ -289,7 +291,8 @@ def compute_totals(job: dict) -> dict:
     extra_mat = sum_lines(job.get("material_navic"))
     
     # Automatický výpočet zálohy: 100% materiál + 100% doprava + 30% práce
-    auto_zaloha = (mat + trans) + (0.3 * work)
+    coefficient = 1.21 if job.get("platce_dph") else 1
+    auto_zaloha = round(((mat + trans) + (0.3 * work)) * coefficient, 2)
     final_zaloha = safe_float(job.get("zaloha_castka"), auto_zaloha)
     
     return {
@@ -297,9 +300,11 @@ def compute_totals(job: dict) -> dict:
         "cena_material": mat,
         "cena_doprava": trans,
         "zaloha": final_zaloha,
-        "celkem": work + mat + trans,
+        "bez_dph": round(work + mat + trans, 2),
+        "dph_21": round((work + mat + trans) * (coefficient - 1), 2),
+        "celkem": round((work + mat + trans) * coefficient, 2),
         "vicepracovne_total": extra_work + extra_mat,
-        "celkem_k_fakturaci": work + mat + trans + extra_work + extra_mat,
+        "celkem_k_fakturaci": round((work + mat + trans + extra_work + extra_mat) * coefficient, 2),
     }
 
 def serialize_job(job: dict) -> dict:
@@ -422,6 +427,7 @@ async def create_job(payload: JobCreate, user: dict = Depends(get_current_user))
         "id": job_id,
         "user_id": user["id"],
         "job_number": job_number,
+        "platce_dph": getattr(payload, "platce_dph", False),
         "client_name": payload.client_name,
         "address": payload.address,
         "title": payload.title,
@@ -476,7 +482,7 @@ async def update_job(job_id: str, payload: JobUpdate, user: dict = Depends(get_c
 
     update = {}
     data = payload.model_dump(exclude_unset=True)
-    for k in ["client_name", "address", "title", "photo_url", "payment_note", "finalized", "zaloha_castka"]:
+    for k in ["client_name", "address", "title", "photo_url", "payment_note", "finalized", "zaloha_castka", "platce_dph"]:
         if k in data:
             update[k] = data[k]
     for k in ["prace", "material", "doprava", "vicepracovne", "material_navic", "diary_entries"]:
@@ -883,6 +889,21 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     elems.append(t)
     elems.append(Spacer(1, 6))
 
+    from xml.sax.saxutils import escape
+    if job.get("jarvis_description"):
+        elems.append(Paragraph("Rozsah prací", h2))
+        elems.append(Paragraph(escape(job["jarvis_description"]).replace("\n", "<br/>"), body))
+    visual = job.get("jarvis_visual", "")
+    if visual.startswith(("data:image/jpeg;base64,", "data:image/png;base64,")):
+        import base64
+        picture = Image(io.BytesIO(base64.b64decode(visual.split(",", 1)[1])))
+        scale = min(160 * mm / picture.imageWidth, 100 * mm / picture.imageHeight)
+        picture.drawWidth, picture.drawHeight = picture.imageWidth * scale, picture.imageHeight * scale
+        elems.append(Spacer(1, 8))
+        elems.append(picture)
+    if job.get("jarvis_notes"):
+        elems.append(Paragraph(escape(job["jarvis_notes"]).replace("\n", "<br/>"), small))
+
     def section(title: str, lines: list):
         elems.append(Paragraph(title, h2))
         if not lines:
@@ -924,7 +945,7 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     trans = section("Doprava, závoz a manipulace", job.get("doprava", []))
 
     elems.append(Spacer(1, 8))
-    totals = job.get("totals", {})
+    totals = compute_totals(job)
     zaloha_k_uhrade = totals.get("zaloha", (mat + trans) + (0.3 * work))
 
     rec_data = [
@@ -932,8 +953,11 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         ["Cena materiálu:", _czech_currency(mat)],
         ["Doprava a manipulace:", _czech_currency(trans)],
         ["POŽADOVANÁ ZÁLOHA:", _czech_currency(zaloha_k_uhrade)],
-        ["CELKEM:", _czech_currency(work + mat + trans)],
+        ["CELKEM:", _czech_currency(totals["celkem"])],
     ]
+    
+    if job.get("platce_dph"):
+        rec_data.insert(3, ["DPH 21 %:", _czech_currency(totals["dph_21"])])
     
     qr_reader = _get_qr_image_stream(user.get("bank_account", ""), zaloha_k_uhrade, f"Zaloha {job['job_number']}", job['id']) if user.get("bank_account") else None
     
@@ -1076,8 +1100,8 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
 
     elems.append(Paragraph("Sekce 4 — Rekapitulace", h2))
     
-    celková_částka = original_total + extra_total
-    totals_billing = job.get("totals", {})
+    totals_billing = compute_totals(job)
+    celková_částka = totals_billing["celkem_k_fakturaci"]
     zaloha_uhrazena = totals_billing.get("zaloha", 0.0)
     k_uhrade_final = max(0.0, celková_částka - zaloha_uhrazena)
 
@@ -1087,6 +1111,9 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
         ["Uhrazená záloha:", f"- {_czech_currency(zaloha_uhrazena)}"],
         ["DOPLATEK CELKEM:", _czech_currency(k_uhrade_final)],
     ]
+    
+    if job.get("platce_dph"):
+        rec_data.insert(2, ["DPH 21 %:", _czech_currency(round((original_total + extra_total) * 0.21, 2))])
     
     qr_reader_billing = _get_qr_image_stream(user.get("bank_account", ""), k_uhrade_final, f"Doplatek {job['job_number']}", job['id']) if user.get("bank_account") else None
 
@@ -1725,7 +1752,8 @@ async def create_jarvis_job(draft, user, job_id):
         "status": "rozpracovano", "finalized": False, "photo_url": "",
         "payment_note": "", "zaloha_castka": None, "created_at": now_utc(), "updated_at": now_utc(),
         "jarvis_draft_id": draft["id"], "jarvis_description": draft["description"],
-        "jarvis_notes": plan.poznamky,
+        "jarvis_notes": plan.poznamky, "platce_dph": plan.platce_dph,
+        "jarvis_visual": draft.get("edit_visual") or draft.get("schema_visual") or "",
     }
     await db.jobs.insert_one(job.copy())
     return job

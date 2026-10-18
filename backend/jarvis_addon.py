@@ -51,6 +51,7 @@ class Plan(BaseModel):
     material: list[Item] = Field(default_factory=list, max_length=100)
     doprava: list[Item] = Field(default_factory=list, max_length=20)
     poznamky: str = Field(default="", max_length=5000)
+    platce_dph: bool = False
 
 
 class Selection(BaseModel):

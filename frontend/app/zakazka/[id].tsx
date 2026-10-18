@@ -285,6 +285,7 @@ export default function ZakazkaDetail() {
               </View>
             </View>
 
+            {job.platce_dph?<Text style={styles.sumLabel}>Základ {fmtCZK(totals.bez_dph)} · DPH 21 % {fmtCZK(totals.dph_21)}</Text>:null}
             <View style={styles.sumTotalRow}>
               <Text style={styles.sumTotalLabel}>CELKEM</Text>
               <Text style={styles.sumTotalVal}>{fmtCZK(totals.celkem)}</Text>
@@ -676,3 +677,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
+

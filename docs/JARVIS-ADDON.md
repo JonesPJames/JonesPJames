@@ -41,3 +41,9 @@ Výpadek AI nesmí v placeném průvodci vymyslet náhradní ceny nebo měření
 ## Ověření
 
 Python testy pokrývají přístup, cizí a expirované licence, oddělení účtů, obnovu návrhu, jednorázové založení zakázky, validaci fotografií/cen a podepisování platebních webhooků včetně aktivace a zrušení. Node testy ověřují autentizaci, placený přístup před AI voláním, všechny dodané fotografie, validaci odpovědí a odmítnutí chybějících rozměrů. Mobilní kontroly zahrnují TypeScript, ESLint a existující regresní testy adresáře/zakázek.
+
+## DPH a výsledná nabídka
+
+Plán obsahuje přepínač `platce_dph` (výchozí vypnutý). Při zapnutí připočte 21 % k základním položkám a do zálohy; nastavení se přenáší do zakázky, jejího souhrnu, PDF nabídky a vyúčtování. PDF nabídka přebírá rozsah prací a vybranou vizualizaci. Ceny položek zůstávají bez DPH. Vhodnost sazby a daňového režimu určuje dodavatel.
+
+Textová AI má volitelnou zálohu `OPENROUTER_API_KEY` + `JARVIS_FALLBACK_MODEL` (výchozí `openrouter/free`). Záloha dostává všechny fotografie a stejná validační pravidla. Tato konfigurace neřeší chybějící kredit samostatného poskytovatele generovaných obrázků.
