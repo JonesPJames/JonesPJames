@@ -52,7 +52,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon --stacktrace --no-parallel --max-workers=2 \
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --stacktrace --no-parallel --max-workers=2 \
             '-Dorg.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8'
       - name: Verify bundled APK and test signature
         run: |
@@ -75,3 +75,4 @@ jobs:
           path: frontend/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 7
+
