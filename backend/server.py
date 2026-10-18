@@ -105,7 +105,7 @@ def safe_float(v, default=0.0) -> float:
         return default
 
 # Pomocná funkce pro bezpečné stažení QR kódu z API bez pádů generování PDF
-def _get_qr_image_reader(account: str, amount: float, message: str, job_id: str) -> Optional[ImageReader]:
+def _get_qr_image_stream(account: str, amount: float, message: str, job_id: str) -> Optional[io.BytesIO]:
     cleaned = account.replace(" ", "").strip()
     if not cleaned:
         return None
@@ -135,7 +135,10 @@ def _get_qr_image_reader(account: str, amount: float, message: str, job_id: str)
         req = urllib.request.Request(api_url, headers={'User-Agent': 'RemeslnikPro/1.0'})
         with urllib.request.urlopen(req, timeout=5) as response:
             img_data = response.read()
-            return ImageReader(io.BytesIO(img_data))
+            image_stream = io.BytesIO(img_data)
+            ImageReader(image_stream).getSize()  # Validate before adding to the document.
+            image_stream.seek(0)
+            return image_stream
     except Exception as e:
         logger.error(f"Chyba při stahování QR kódu: {e}")
         return None
@@ -616,6 +619,36 @@ class GenerateVariantsIn(BaseModel):
     def parse_floats(cls, v):
         return clean_comma_float(v)
 
+def _parse_quote_variants(content: str) -> list:
+    """Accept a JSON array, including code fences, and validate PDF-facing fields."""
+    import json
+    if not isinstance(content, str):
+        raise ValueError("AI nevrátila text")
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(content):
+        if char != "[":
+            continue
+        try:
+            variants, _ = decoder.raw_decode(content[index:])
+        except ValueError:
+            continue
+        if not isinstance(variants, list) or len(variants) != 3:
+            continue
+        for variant in variants:
+            if not isinstance(variant, dict):
+                break
+            if any(key in variant and not isinstance(variant[key], str)
+                   for key in ("nazev", "rozsah", "zaruka", "termin", "popis")):
+                break
+            if any(key in variant and (not isinstance(variant[key], list)
+                   or any(not isinstance(item, str) for item in variant[key]))
+                   for key in ("included", "excluded")):
+                break
+        else:
+            return variants
+    raise ValueError("AI nevrátila 3 platné varianty")
+
+
 @api.post("/ai/generate-variants")
 async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends(get_current_user)):
     base = float(payload.cena_material + payload.cena_prace + payload.cena_doprava)
@@ -688,19 +721,20 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
         f"V popisu varianty C vysvětli, v čem dává smysl těch +{diff_c_pct} % oproti B "
         f"(prémiové značkové materiály, dlouhá záruka, prioritní termín)."
     )
-    import json
+    import asyncio
     try:
+        generation_mode = "ai"
         try:
             if os.environ.get("AI_PROVIDER", "openrouter").lower() == "offline":
                 raise HTTPException(status_code=503, detail="Offline režim nabídek")
-            out = await _llm_call(sys, prompt)
-        except HTTPException as exc:
-            if exc.status_code not in (502, 503):
+            out = await asyncio.wait_for(_llm_call(sys, prompt), timeout=25)
+            variants_raw = _parse_quote_variants(out)
+        except (HTTPException, ValueError, TypeError, asyncio.TimeoutError) as exc:
+            if isinstance(exc, HTTPException) and exc.status_code not in (502, 503, 504):
                 raise
-            # Development fallback: transparent, deterministic quote drafts.
-            # Never invent technical specifications, quantities or materials.
-            logger.warning("AI unavailable; generating transparent offline quote drafts")
-            out = json.dumps([
+            logger.warning("AI quote content unavailable (%s); using calculation drafts", type(exc).__name__)
+            generation_mode = "fallback"
+            variants_raw = [
                 {
                     "nazev": name,
                     "rozsah": payload.description.strip() or payload.title.strip(),
@@ -711,14 +745,7 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
                     "popis": "Orientační kalkulace bez AI. Rozsah, ceny a termíny vyžadují kontrolu řemeslníkem."
                 }
                 for name in ("Základní", "Zlatá střední cesta", "Premium")
-            ], ensure_ascii=False)
-        import json, re
-        m = re.search(r"\[.*\]", out, re.S)
-        if not m:
-            raise ValueError("AI nevrátila JSON")
-        variants_raw = json.loads(m.group(0))
-        if not isinstance(variants_raw, list) or len(variants_raw) < 3:
-            raise ValueError("AI nevrátila 3 varianty")
+            ]
 
         prices = [A, B, C]
         defaults_nazev = ["Základní", "Zlatá střední cesta", "Premium"]
@@ -767,10 +794,11 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
             "user_id": user["id"],
             "input": payload.model_dump(),
             "base_price": base,
+            "generation_mode": generation_mode,
             "variants": variants,
             "created_at": now_utc(),
         })
-        return {"id": bundle_id, "base_price": base, "variants": variants}
+        return {"id": bundle_id, "base_price": base, "variants": variants, "generation_mode": generation_mode}
     except Exception as e:
         logger.exception("ai_generate_variants failed")
         raise HTTPException(500, f"AI selhala: {e}")
@@ -907,7 +935,7 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         ["CELKEM:", _czech_currency(work + mat + trans)],
     ]
     
-    qr_reader = _get_qr_image_reader(user.get("bank_account", ""), zaloha_k_uhrade, f"Zaloha {job['job_number']}", job['id']) if user.get("bank_account") else None
+    qr_reader = _get_qr_image_stream(user.get("bank_account", ""), zaloha_k_uhrade, f"Zaloha {job['job_number']}", job['id']) if user.get("bank_account") else None
     
     if qr_reader:
         rec_tbl = Table(rec_data, colWidths=[80*mm, 50*mm])
@@ -929,7 +957,6 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     ]))
     
     if qr_reader:
-        # ZDE JE TA OPRAVA: Zabalení ImageReaderu do platypus Image objektu pro tabulky
         qr_flowable = Image(qr_reader, width=40*mm, height=40*mm)
         bottom_block = Table([[rec_tbl, qr_flowable]], colWidths=[135*mm, 45*mm])
         bottom_block.setStyle(TableStyle([
@@ -1061,7 +1088,7 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
         ["DOPLATEK CELKEM:", _czech_currency(k_uhrade_final)],
     ]
     
-    qr_reader_billing = _get_qr_image_reader(user.get("bank_account", ""), k_uhrade_final, f"Doplatek {job['job_number']}", job['id']) if user.get("bank_account") else None
+    qr_reader_billing = _get_qr_image_stream(user.get("bank_account", ""), k_uhrade_final, f"Doplatek {job['job_number']}", job['id']) if user.get("bank_account") else None
 
     if qr_reader_billing:
         rec = Table(rec_data, colWidths=[80*mm, 50*mm])
@@ -1079,7 +1106,6 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     
     elems.append(Spacer(1, 6))
     if qr_reader_billing:
-        # ZDE JE TA OPRAVA: Zabalení ImageReaderu do platypus Image objektu pro tabulky
         qr_flowable_billing = Image(qr_reader_billing, width=40*mm, height=40*mm)
         bottom_block = Table([[rec, qr_flowable_billing]], colWidths=[135*mm, 45*mm])
         bottom_block.setStyle(TableStyle([
@@ -1154,7 +1180,7 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
             for it in included:
                 elems.append(Paragraph(f"✓ {it}", body))
                 
-            exclude_list = v.get("excluded") or []
+        exclude_list = v.get("excluded") or []
         if exclude_list:
             elems.append(Paragraph("<b>Co v ceně ZAHRNUTO NENÍ:</b>", body))
             for it in exclude_list:
@@ -1684,6 +1710,30 @@ async def startup():
         })
     # Never overwrite an existing owner password during application startup.
     # Password changes must use an authenticated or verified reset flow.
+
+from jarvis_addon import create_router as create_jarvis_addon_router, Plan as JarvisPlan
+
+async def create_jarvis_job(draft, user, job_id):
+    plan = JarvisPlan.model_validate(draft["plan"])
+    def items(rows):
+        return [dict(id=str(uuid.uuid4()), **item.model_dump()) for item in rows]
+    job = {
+        "_id": job_id, "id": job_id, "user_id": user["id"], "job_number": await next_job_number(user["id"]),
+        "title": draft["title"], "client_name": draft["client_name"], "address": draft["address"],
+        "prace": items(plan.prace), "material": items(plan.material), "doprava": items(plan.doprava),
+        "vicepracovne": [], "material_navic": [], "diary_entries": [],
+        "status": "rozpracovano", "finalized": False, "photo_url": "",
+        "payment_note": "", "zaloha_castka": None, "created_at": now_utc(), "updated_at": now_utc(),
+        "jarvis_draft_id": draft["id"], "jarvis_description": draft["description"],
+        "jarvis_notes": plan.poznamky,
+    }
+    await db.jobs.insert_one(job.copy())
+    return job
+
+jarvis_addon = create_jarvis_addon_router(db, get_current_user, create_jarvis_job, JobCreate)
+app.include_router(jarvis_addon, prefix="/api")
+from jarvis_billing import create_router as create_jarvis_billing_router
+app.include_router(create_jarvis_billing_router(db, get_current_user), prefix="/api")
 
 from jarvis_integration import create_router as create_jarvis_integration_router
 app.include_router(create_jarvis_integration_router(db, get_current_user), prefix="/api")

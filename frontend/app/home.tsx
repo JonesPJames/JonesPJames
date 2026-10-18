@@ -24,7 +24,7 @@ const TILES: { key: string; title: string; subtitle: string; icon: any; href: st
   { key: "adresar", title: "Adresář zakázek", subtitle: "Posledních 10 zakázek", icon: "folder-outline", href: "/adresar" },
   { key: "klienti", title: "Adresář klientů", subtitle: "Klienti A–Z a všechny jejich zakázky", icon: "people-outline", href: "/klienti" },
   { key: "kalkulacka", title: "Kalkulačka prací", subtitle: "Ceny dle profese", icon: "calculator-outline", href: "/kalkulacka" },
-  { key: "jarvis", title: "JARVIS AI", subtitle: "Asistent pro moje zakázky", icon: "chatbubbles-outline", href: "/jarvis" },
+  { key: "jarvis", title: "JARVIS AI", subtitle: "Základní asistent a placená plná nadstavba", icon: "chatbubbles-outline", href: "/jarvis" },
   { key: "generator", title: "Generátor nabídek", subtitle: "AI vytvoří 3 varianty", icon: "sparkles-outline", href: "/generator" },
   { key: "zamestnanci", title: "Zaměstnanci", subtitle: "Správa týmu a PIN přístupů", icon: "people-outline", href: "/zamestnanci" },
   { key: "profil", title: "Můj profil", subtitle: "Jméno, firma, telefon", icon: "person-outline", href: "/profil" },
@@ -203,3 +203,4 @@ const styles = StyleSheet.create({
   tileTitle: { fontSize: 17, fontWeight: "700", color: theme.colors.text },
   tileSub: { fontSize: 13, color: theme.colors.textMuted, marginTop: 2 },
 });
+

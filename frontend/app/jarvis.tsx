@@ -4,8 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useAuth } from "../src/auth";
 import { api } from "../src/api";
+import { JarvisAccess } from "../src/components/JarvisAccess";
 
-const JARVIS_URL = process.env.EXPO_PUBLIC_JARVIS_API_URL || "";
 type Reply = { answer: string; mode: string; total?: number };
 
 function parseJobCreation(text: string): string | null {
@@ -132,32 +132,12 @@ export default function JarvisScreen() {
       ]);
       return;
     }
-    if (!JARVIS_URL.startsWith("https://")) {
-      Alert.alert("JARVIS není nakonfigurován", "Pro tuto verzi aplikace zatím není dostupné bezpečné připojení.");
-      return;
-    }
     setBusy(true);
     try {
-      // The Pro token never leaves the Pro API. JARVIS receives only a short-lived gateway token.
-      const exchanged = await api.post("/integrations/jarvis/token", {});
-      const gatewayToken = exchanged.data.access_token as string;
-      if (!gatewayToken) throw new Error("Chybí přístupový token JARVIS");
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-      try {
-        const response = await fetch(JARVIS_URL.replace(/\/$/, "") + "/api/v1/jarvis/assistant", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: "Bearer " + gatewayToken },
-          body: JSON.stringify({ message: message.trim() }),
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error("JARVIS není dostupný (" + response.status + ")");
-        const data = await response.json() as Reply;
-        setAnswer(data.answer || "Nepodařilo se získat odpověď.");
-        setConnected(true);
-      } finally {
-        clearTimeout(timeout);
-      }
+      const response = await api.post("/jarvis/assistant", { message: message.trim() });
+      const data = response.data as Reply;
+      setAnswer(data.answer || "Nepodařilo se získat odpověď.");
+      setConnected(true);
     } catch (error) {
       setConnected(false);
       Alert.alert("Připojení JARVIS", error instanceof Error ? error.message : "Nepodařilo se připojit.");
@@ -172,6 +152,7 @@ export default function JarvisScreen() {
         <TouchableOpacity onPress={() => router.back()}><Text style={styles.back}>‹ Zpět</Text></TouchableOpacity>
         <Text style={styles.title}>JARVIS AI</Text>
         <Text style={styles.sub}>Asistent Řemeslník Pro</Text>
+        <JarvisAccess />
         <Text style={styles.status}>{connected ? "Připojeno k zakázkám" : "Připojení se ověří při dotazu"}</Text>
         <Text style={styles.label}>Na co se chcete zeptat?</Text>
         <TextInput style={styles.input} value={message} onChangeText={setMessage} multiline
@@ -209,3 +190,4 @@ const styles = StyleSheet.create({
   answerText: { color: "#182333", fontSize: 16, lineHeight: 24 },
   note: { color: "#667184", fontSize: 13, marginTop: 14 },
 });
+

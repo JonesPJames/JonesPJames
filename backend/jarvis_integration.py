@@ -53,6 +53,12 @@ def create_router(db, get_current_user):
             raise HTTPException(403, "UNKNOWN_OWNER")
         return user
 
+    @router.get("/access")
+    async def addon_access(authorization: str = Header(default="")):
+        user = await owner(authorization)
+        from jarvis_addon import create_router as addon_router
+        return await addon_router(db, get_current_user, None, None).access_for(user)
+
     @router.post("/token")
     async def gateway_token(user=__import__("fastapi").Depends(get_current_user)):
         secret = os.environ.get("JARVIS_GATEWAY_SECRET", "")
@@ -135,3 +141,4 @@ def create_router(db, get_current_user):
         return {key: job[key] for key in allowed if key in job}
 
     return router
+
