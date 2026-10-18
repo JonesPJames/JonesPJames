@@ -72,3 +72,16 @@ def test_different_product_never_unlocks_jarvis(billing):
     raw = json.dumps({'type': 'customer.subscription.updated', 'data': {'object': {'id': 'sub_test'}}}).encode()
     assert client.post('/api/jarvis/billing/webhook', content=raw, headers={'stripe-signature': signature(raw)}).status_code == 200
     assert asyncio.run(db.settings.find_one({'_id': 'jarvis:subscription:sub_test'}))['status'] == 'inactive'
+
+
+def test_portal_uses_active_subscription_after_resubscription(billing):
+    client, db, sub, request = billing
+    asyncio.run(db.settings.insert_one({'_id': 'old', 'kind': 'jarvis-subscription', 'user_id': 'owner',
+                                       'status': 'inactive', 'subscription_id': 'sub_old'}))
+    asyncio.run(db.settings.insert_one({'_id': 'new', 'kind': 'jarvis-subscription', 'user_id': 'owner',
+                                       'status': 'active', 'subscription_id': 'sub_current'}))
+    request.side_effect = [SimpleNamespace(status_code=200, json=lambda: sub),
+                           SimpleNamespace(status_code=200, json=lambda: {'url': 'https://billing.stripe.com/test'})]
+    result = client.post('/api/jarvis/billing/portal')
+    assert result.status_code == 200
+    assert str(request.await_args_list[0].args[1]).endswith('/subscriptions/sub_current')

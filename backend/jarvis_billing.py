@@ -123,7 +123,9 @@ def create_router(db, get_user):
 
     @router.post('/portal')
     async def portal(user=Depends(get_user)):
-        record = await db.settings.find_one({'kind': 'jarvis-subscription', 'user_id': user['id']})
+        record = await db.settings.find_one({'kind': 'jarvis-subscription', 'user_id': user['id'], 'status': 'active'})
+        if not record:
+            record = await db.settings.find_one({'kind': 'jarvis-subscription', 'user_id': user['id']}, sort=[('expires_at', -1)])
         if not record:
             raise HTTPException(404, 'Předplatné nenalezeno.')
         subscription = await stripe('GET', 'subscriptions/' + record['subscription_id'])
