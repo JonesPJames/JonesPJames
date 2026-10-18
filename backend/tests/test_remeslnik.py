@@ -214,7 +214,7 @@ class TestPDFs:
 
 # -------------------- AI --------------------
 class TestAI:
-    @pytest.mark.skipif(not os.environ.get("EMERGENT_LLM_KEY"), reason="Chybí Gemini klíč")
+    @pytest.mark.skipif(not os.environ.get("OPENROUTER_API_KEY"), reason="Chybí klíč aktuálního poskytovatele OpenRouter")
     def test_material_price(self, auth_headers):
         r = requests.post(f"{API}/ai/material-price", json={"name": "keramická dlažba"}, headers=auth_headers, timeout=60)
         assert r.status_code == 200, r.text
@@ -222,13 +222,13 @@ class TestAI:
         assert "jednotka" in d and "cena" in d and "poznamka" in d
         assert isinstance(d["cena"], (int, float))
 
-    @pytest.mark.skipif(not os.environ.get("EMERGENT_LLM_KEY"), reason="Chybí Gemini klíč")
+    @pytest.mark.skipif(not os.environ.get("OPENROUTER_API_KEY"), reason="Chybí klíč aktuálního poskytovatele OpenRouter")
     def test_enhance_description(self, auth_headers):
         r = requests.post(f"{API}/ai/enhance-description", json={"text": "rekonstrukce koupelny vcetne dlazby and obkladu"}, headers=auth_headers, timeout=60)
         assert r.status_code == 200, r.text
         assert len(r.json()["text"]) > 10
 
-    @pytest.mark.skipif(not os.environ.get("EMERGENT_LLM_KEY"), reason="Chybí Gemini klíč")
+    @pytest.mark.skipif(not os.environ.get("OPENROUTER_API_KEY"), reason="Chybí klíč aktuálního poskytovatele OpenRouter")
     def test_generate_variants_and_pdf(self, auth_headers, admin_token):
         payload = {
             "title": "TEST Rekonstrukce koupelny",
@@ -274,3 +274,4 @@ class TestImport:
         
 
                           
+

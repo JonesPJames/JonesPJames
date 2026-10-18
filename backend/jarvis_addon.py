@@ -233,7 +233,7 @@ def create_router(db, get_user, create_job, job_model):
         result = await upstream("visual", {"input": {k: doc[k] for k in Input.model_fields},
             "variant": doc["analysis"]["varianty"][doc["selected"]], "mode": payload.mode}, user)
         image = result.get("imageUrl", "")
-        if not image.startswith(("data:image/png;base64,", "data:image/jpeg;base64,")) or len(image) > 8_000_000:
+        if not image.startswith(("data:image/png;base64,", "data:image/jpeg;base64,")) or len(image) > 3_000_000:
             raise HTTPException(502, "AI nevrátila platný obrázek.")
         await db.settings.update_one({"_id": "jarvis:draft:" + draft_id, "user_id": user["id"]}, {"$set": {payload.mode + "_visual": image}})
         return result

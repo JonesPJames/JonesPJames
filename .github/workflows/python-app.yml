@@ -41,7 +41,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         # Opraveno dotenv na python-dotenv
-        pip install flake8 pytest uvicorn motor pydantic email-validator bcrypt pyjwt reportlab requests python-dotenv mongomock-motor==0.0.36
+        pip install flake8 pytest uvicorn motor pydantic email-validator bcrypt pyjwt reportlab requests python-dotenv mongomock-motor==0.0.36 pytest-asyncio
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         
     - name: Lint with flake8
@@ -55,6 +55,7 @@ jobs:
       env:
         MONGO_URL: "mongodb://localhost:27017"
         DB_NAME: "remeslnik_test"
+        TEST_MONGO_URL: "mongodb://localhost:27017"
         JWT_SECRET: "test_secret_key_12345"
         EMERGENT_LLM_KEY: ${{ secrets.EMERGENT_LLM_KEY }}  # <--- TADY JE TA ZMĚNA
         EXPO_PUBLIC_BACKEND_URL: "http://127.0.0.1:8001"
@@ -79,6 +80,7 @@ jobs:
       env:
         MONGO_URL: "mongodb://localhost:27017"
         DB_NAME: "remeslnik_test"
+        TEST_MONGO_URL: "mongodb://localhost:27017"
         JWT_SECRET: "test_secret_key_12345"
         EMERGENT_LLM_KEY: ${{ secrets.EMERGENT_LLM_KEY }}  # <--- TADY JE TA ZMĚNA
         EXPO_PUBLIC_BACKEND_URL: "http://127.0.0.1:8001"
