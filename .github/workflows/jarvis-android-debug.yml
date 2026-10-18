@@ -1,0 +1,78 @@
+name: JARVIS standalone Android test APK
+on:
+  push:
+    branches: [work/jarvis-sop-api-20261014]
+    paths: ['frontend/**', '.github/workflows/jarvis-android-debug.yml']
+  pull_request:
+    branches: [main, work/jarvis-sop-api-20261014]
+    paths: ['frontend/**', '.github/workflows/jarvis-android-debug.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: jarvis-apk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: '1'
+      EXPO_PUBLIC_JARVIS_API_URL: https://jarvis-api-staging-staging.up.railway.app
+      EXPO_PUBLIC_PRO_API_URL: https://remeslnik-pro-sop-staging-staging.up.railway.app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify preinstalled Android SDK
+        run: test -d "$ANDROID_HOME"
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Verify Expo dependency compatibility
+        run: npx expo install --check
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --no-install
+      - name: Compile standalone test APK with embedded JavaScript
+        env:
+          NODE_ENV: production
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --stacktrace --no-parallel --max-workers=2 \
+            '-Dorg.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=2048m -Dfile.encoding=UTF-8'
+      - name: Verify bundled APK and test signature
+        run: |
+          python3 - <<'PYAPK'
+          import zipfile
+          path = 'android/app/build/outputs/apk/release/app-release.apk'
+          with zipfile.ZipFile(path) as apk:
+              data = apk.read('assets/index.android.bundle')
+              if len(data) < 10000:
+                  raise SystemExit('Missing or empty embedded JavaScript bundle')
+          print('Embedded JavaScript bytes:', len(data))
+          PYAPK
+          build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          "$build_tools/apksigner" verify --verbose android/app/build/outputs/apk/release/app-release.apk
+          echo 'Standalone staging APK uses the Expo-generated debug test signing key; not for Play Store.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish standalone test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: remeslnik-pro-jarvis-standalone-test-apk
+          path: frontend/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 7
+

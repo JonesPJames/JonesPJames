@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -14,8 +14,9 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppFooter } from "../src/components/AppFooter";
 import { AppHeader } from "../src/components/AppHeader";
-import { StatusBadge } from "../src/components/StatusBadge";
-import { theme, fmtCZK, fmtDateCZ } from "../src/theme";
+import { JobCard } from "../src/components/JobCard";
+import { DirectoryJob, readJobs, recentJobs } from "../src/clientDirectory";
+import { theme } from "../src/theme";
 import { api, getApiErrorMessage } from "../src/api";
 
 const FILTERS = [
@@ -31,29 +32,34 @@ export default function Adresar() {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("vse");
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<DirectoryJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const request = useRef<AbortController | null>(null);
 
-  async function load() {
-    setError("");
+  const load = useCallback(async () => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     try {
-      const r = await api.get("/jobs", { params: { q, status: filter } });
-      setItems(r.data);
+      const r = await api.get("/jobs", { signal: controller.signal });
+      if (!controller.signal.aborted) { setItems(readJobs(r.data)); setError(""); }
     } catch (e: any) {
-      setError(getApiErrorMessage(e));
+      if (!controller.signal.aborted) { setItems([]); setError(getApiErrorMessage(e)); }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!controller.signal.aborted) { setLoading(false); setRefreshing(false); }
     }
-  }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      load();
-    }, [q, filter])
+      void load();
+      return () => request.current?.abort();
+    }, [load])
   );
+
+  const visible = useMemo(() => recentJobs(items, q, filter), [items, q, filter]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -63,7 +69,8 @@ export default function Adresar() {
         <TextInput
           value={q}
           onChangeText={setQ}
-          placeholder="Hledat klienta nebo číslo zakázky"
+          placeholder="Hledat v posledních 10 zakázkách"
+          accessibilityLabel="Hledat v posledních deseti zakázkách"
           placeholderTextColor={theme.colors.placeholder}
           style={styles.search}
           testID="search-input"
@@ -90,55 +97,43 @@ export default function Adresar() {
         })}
       </ScrollView>
 
-      <ScrollView
-        contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
-      >
-        {loading ? (
-          <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 40 }} />
-        ) : error ? (
-          <Text style={styles.err}>{error}</Text>
-        ) : items.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="folder-open-outline" size={48} color={theme.colors.textMuted} />
-            <Text style={styles.emptyTitle}>Zatím žádné zakázky</Text>
-            <Text style={styles.emptySub}>Vytvořte první nabídku tlačítkem níže.</Text>
-          </View>
-        ) : (
-          items.map((j) => (
-            <TouchableOpacity
-              key={j.id}
-              style={styles.card}
-              onPress={() => router.push(`/zakazka/${j.id}`)}
-              testID={`job-${j.id}`}
-              activeOpacity={0.85}
-            >
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <Text style={styles.jobNo}>{j.job_number}</Text>
-                <StatusBadge status={j.effective_status} daysLeft={j.days_left} />
-              </View>
-              <Text style={styles.title} numberOfLines={1}>
-                {j.title || "(bez názvu)"}
-              </Text>
-              <Text style={styles.client} numberOfLines={1}>
-                {j.client_name || "—"}
-              </Text>
-              <View style={styles.cardFooter}>
-                <Text style={styles.date}>{fmtDateCZ(j.created_at)}</Text>
-                <Text style={styles.total}>{fmtCZK(j.totals?.celkem || 0)}</Text>
-              </View>
-            </TouchableOpacity>
-          ))
-        )}
-      </ScrollView>
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push("/nova-zakazka")}
-        testID="fab-new"
-        activeOpacity={0.85}
-      >
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
+      <View style={styles.archive}>
+        <Text style={styles.caption}>Posledních 10 zakázek</Text>
+        <TouchableOpacity onPress={() => router.push("/klienti")} accessibilityRole="button" testID="open-client-directory" style={styles.archiveLink}>
+          <Text style={styles.archiveText}>Všechny zakázky podle klientů</Text>
+          <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.jobsArea} testID="jobs-content-area">
+        <ScrollView
+          contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}
+        >
+          {loading ? (
+            <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 40 }} />
+          ) : error ? (
+            <Text style={styles.err}>{error}</Text>
+          ) : visible.length === 0 ? (
+            <View style={styles.empty}>
+              <Ionicons name="folder-open-outline" size={48} color={theme.colors.textMuted} />
+              <Text style={styles.emptyTitle}>{items.length ? "Žádná odpovídající nedávná zakázka" : "Zatím žádné zakázky"}</Text>
+              <Text style={styles.emptySub}>{items.length ? "Starší zakázky najdete v adresáři klientů." : "Vytvořte první nabídku tlačítkem níže."}</Text>
+            </View>
+          ) : (
+            visible.map(job => <JobCard key={job.id} job={job} />)
+          )}
+        </ScrollView>
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => router.push("/nova-zakazka")}
+          testID="fab-new"
+          accessibilityRole="button"
+          accessibilityLabel="Vytvořit novou zakázku"
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={28} color="#fff" />
+        </TouchableOpacity>
+      </View>
       <AppFooter />
     </SafeAreaView>
   );
@@ -169,34 +164,16 @@ const styles = StyleSheet.create({
   },
   chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   chipText: { color: theme.colors.text, fontWeight: "700", fontSize: 13 },
+  jobsArea: { flex: 1 },
+  archive: { paddingHorizontal: 20, paddingBottom: 8, gap: 4 },
+  caption: { fontSize: 13, color: theme.colors.textMuted, fontWeight: "700" },
+  archiveLink: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 10 },
+  archiveText: { color: theme.colors.primary, fontSize: 14, fontWeight: "700", flexShrink: 1 },
   list: { padding: 16, paddingTop: 4, paddingBottom: 100 },
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.card,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadow.card,
-  },
-  jobNo: { color: theme.colors.primary, fontWeight: "800", fontSize: 13 },
-  title: { fontSize: 16, fontWeight: "800", color: theme.colors.text, marginTop: 8 },
-  client: { fontSize: 14, color: theme.colors.textMuted, marginTop: 2 },
-  cardFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  date: { fontSize: 12, color: theme.colors.textMuted },
-  total: { fontSize: 16, fontWeight: "800", color: theme.colors.text },
   fab: {
     position: "absolute",
     right: 20,
-    bottom: 28,
+    bottom: 20,
     width: 60,
     height: 60,
     borderRadius: 30,

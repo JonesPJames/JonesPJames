@@ -32,7 +32,6 @@ db_name = os.environ["DB_NAME"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[db_name]
 
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 
 app = FastAPI(title="Remeslnik Pro API")
 api = APIRouter(prefix="/api")
@@ -106,7 +105,7 @@ def safe_float(v, default=0.0) -> float:
         return default
 
 # Pomocná funkce pro bezpečné stažení QR kódu z API bez pádů generování PDF
-def _get_qr_image_reader(account: str, amount: float, message: str, job_id: str) -> Optional[ImageReader]:
+def _get_qr_image_stream(account: str, amount: float, message: str, job_id: str) -> Optional[io.BytesIO]:
     cleaned = account.replace(" ", "").strip()
     if not cleaned:
         return None
@@ -136,7 +135,10 @@ def _get_qr_image_reader(account: str, amount: float, message: str, job_id: str)
         req = urllib.request.Request(api_url, headers={'User-Agent': 'RemeslnikPro/1.0'})
         with urllib.request.urlopen(req, timeout=5) as response:
             img_data = response.read()
-            return ImageReader(io.BytesIO(img_data))
+            image_stream = io.BytesIO(img_data)
+            ImageReader(image_stream).getSize()  # Validate before adding to the document.
+            image_stream.seek(0)
+            return image_stream
     except Exception as e:
         logger.error(f"Chyba při stahování QR kódu: {e}")
         return None
@@ -223,6 +225,7 @@ class LineItem(BaseModel):
         return clean_comma_float(v)
 
 class JobBase(BaseModel):
+    platce_dph: bool = False
     client_name: str = ""
     address: str = ""
     title: str = ""
@@ -234,6 +237,7 @@ class JobCreate(JobBase):
     pass
 
 class JobUpdate(BaseModel):
+    platce_dph: Optional[bool] = None
     client_name: Optional[str] = None
     address: Optional[str] = None
     title: Optional[str] = None
@@ -287,7 +291,8 @@ def compute_totals(job: dict) -> dict:
     extra_mat = sum_lines(job.get("material_navic"))
     
     # Automatický výpočet zálohy: 100% materiál + 100% doprava + 30% práce
-    auto_zaloha = (mat + trans) + (0.3 * work)
+    coefficient = 1.21 if job.get("platce_dph") else 1
+    auto_zaloha = round(((mat + trans) + (0.3 * work)) * coefficient, 2)
     final_zaloha = safe_float(job.get("zaloha_castka"), auto_zaloha)
     
     return {
@@ -295,9 +300,11 @@ def compute_totals(job: dict) -> dict:
         "cena_material": mat,
         "cena_doprava": trans,
         "zaloha": final_zaloha,
-        "celkem": work + mat + trans,
+        "bez_dph": round(work + mat + trans, 2),
+        "dph_21": round((work + mat + trans) * (coefficient - 1), 2),
+        "celkem": round((work + mat + trans) * coefficient, 2),
         "vicepracovne_total": extra_work + extra_mat,
-        "celkem_k_fakturaci": work + mat + trans + extra_work + extra_mat,
+        "celkem_k_fakturaci": round((work + mat + trans + extra_work + extra_mat) * coefficient, 2),
     }
 
 def serialize_job(job: dict) -> dict:
@@ -385,6 +392,33 @@ async def update_me(payload: dict, user: dict = Depends(get_current_user)):
     return public_user(fresh)
 
 # ---------- Jobs ----------
+class ClientCreate(BaseModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    city: str = Field(default="", max_length=200)
+
+@api.post("/clients")
+async def create_client(payload: ClientCreate, user: dict = Depends(get_current_user)):
+    first_name = payload.first_name.strip()
+    last_name = payload.last_name.strip()
+    city = payload.city.strip()
+    if not first_name or not last_name:
+        raise HTTPException(status_code=422, detail="Jméno a příjmení jsou povinné")
+    existing = await db.clients.find_one({"user_id": user["id"], "first_name_key": first_name.casefold(), "last_name_key": last_name.casefold(), "city_key": city.casefold()})
+    if existing:
+        raise HTTPException(status_code=409, detail="Klient již existuje")
+    item = {"id": str(uuid.uuid4()), "user_id": user["id"], "first_name": first_name,
+            "last_name": last_name, "city": city, "first_name_key": first_name.casefold(),
+            "last_name_key": last_name.casefold(), "city_key": city.casefold(),
+            "created_at": now_utc()}
+    await db.clients.insert_one(item)
+    return {"id": item["id"], "first_name": first_name, "last_name": last_name, "city": city}
+
+@api.get("/clients")
+async def list_clients(user: dict = Depends(get_current_user)):
+    cursor = db.clients.find({"user_id": user["id"]}, {"_id": 0, "id": 1, "first_name": 1, "last_name": 1, "city": 1}).sort("created_at", -1)
+    return [item async for item in cursor]
+
 @api.post("/jobs")
 async def create_job(payload: JobCreate, user: dict = Depends(get_current_user)):
     job_id = str(uuid.uuid4())
@@ -393,6 +427,7 @@ async def create_job(payload: JobCreate, user: dict = Depends(get_current_user))
         "id": job_id,
         "user_id": user["id"],
         "job_number": job_number,
+        "platce_dph": getattr(payload, "platce_dph", False),
         "client_name": payload.client_name,
         "address": payload.address,
         "title": payload.title,
@@ -447,7 +482,7 @@ async def update_job(job_id: str, payload: JobUpdate, user: dict = Depends(get_c
 
     update = {}
     data = payload.model_dump(exclude_unset=True)
-    for k in ["client_name", "address", "title", "photo_url", "payment_note", "finalized", "zaloha_castka"]:
+    for k in ["client_name", "address", "title", "photo_url", "payment_note", "finalized", "zaloha_castka", "platce_dph"]:
         if k in data:
             update[k] = data[k]
     for k in ["prace", "material", "doprava", "vicepracovne", "material_navic", "diary_entries"]:
@@ -486,26 +521,46 @@ async def delete_job(job_id: str, user: dict = Depends(get_current_user)):
 
 # ---------- AI ----------
 async def _llm_call(system: str, prompt: str, session_id: Optional[str] = None) -> str:
+    """Server-side OpenAI call; API key is never sent to the mobile client."""
     import asyncio
-    import google.generativeai as genai
+    import json
+    import urllib.error
 
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(status_code=500, detail="V nastavení chybí API klíč pro Gemini (EMERGENT_LLM_KEY)")
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not key:
+        raise HTTPException(status_code=503, detail="AI zatím není aktivována. Nastavte OPENROUTER_API_KEY v Railway.")
+    model = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
+    if model != "openrouter/free" and not model.endswith(":free"):
+        raise HTTPException(status_code=503, detail="Only free AI models are permitted")
+    body = json.dumps({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+    }).encode("utf-8")
 
-    def _run_request():
-        genai.configure(api_key=EMERGENT_LLM_KEY)
-        model = genai.GenerativeModel(
-            model_name="gemini-3.5-flash",
-            system_instruction=system
+    def _request():
+        request = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=body,
+            headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+            method="POST",
         )
-        response = model.generate_content(prompt)
-        return response.text
+        with urllib.request.urlopen(request, timeout=20) as response:
+            result = json.load(response)
+        return result["choices"][0]["message"]["content"]
 
     try:
-        return await asyncio.to_thread(_run_request)
-    except Exception as e:
-        logger.error(f"Gemini API chyba: {e}")
-        raise HTTPException(status_code=500, detail=f"Gemini API selhalo: {e}")
+        return await asyncio.to_thread(_request)
+    except urllib.error.HTTPError as exc:
+        logger.error("OpenAI API HTTP status: %s", exc.code)
+        raise HTTPException(status_code=502, detail="AI služba odmítla požadavek. Zkontrolujte API klíč a kredit.")
+    except Exception:
+        logger.exception("OpenAI API request failed")
+        raise HTTPException(status_code=502, detail="AI služba je dočasně nedostupná.")
+
 
 class MaterialPriceIn(BaseModel):
     name: str
@@ -570,11 +625,41 @@ class GenerateVariantsIn(BaseModel):
     def parse_floats(cls, v):
         return clean_comma_float(v)
 
+def _parse_quote_variants(content: str) -> list:
+    """Accept a JSON array, including code fences, and validate PDF-facing fields."""
+    import json
+    if not isinstance(content, str):
+        raise ValueError("AI nevrátila text")
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(content):
+        if char != "[":
+            continue
+        try:
+            variants, _ = decoder.raw_decode(content[index:])
+        except ValueError:
+            continue
+        if not isinstance(variants, list) or len(variants) != 3:
+            continue
+        for variant in variants:
+            if not isinstance(variant, dict):
+                break
+            if any(key in variant and not isinstance(variant[key], str)
+                   for key in ("nazev", "rozsah", "zaruka", "termin", "popis")):
+                break
+            if any(key in variant and (not isinstance(variant[key], list)
+                   or any(not isinstance(item, str) for item in variant[key]))
+                   for key in ("included", "excluded")):
+                break
+        else:
+            return variants
+    raise ValueError("AI nevrátila 3 platné varianty")
+
+
 @api.post("/ai/generate-variants")
 async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends(get_current_user)):
     base = float(payload.cena_material + payload.cena_prace + payload.cena_doprava)
     if base <= 0:
-        base = 50000.0
+        raise HTTPException(status_code=422, detail="Pro výpočet nabídky vyplňte alespoň jednu cenu. Bez podkladů nelze cenu odhadovat.")
 
     narocnost_mult = {"nizka": 1.00, "stredni": 1.04, "vysoka": 1.10}[payload.narocnost]
     urgence_mult = {"bezna": 1.00, "zvysena": 1.06, "expresni": 1.15}[payload.urgence]
@@ -642,15 +727,31 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
         f"V popisu varianty C vysvětli, v čem dává smysl těch +{diff_c_pct} % oproti B "
         f"(prémiové značkové materiály, dlouhá záruka, prioritní termín)."
     )
+    import asyncio
     try:
-        out = await _llm_call(sys, prompt)
-        import json, re
-        m = re.search(r"\[.*\]", out, re.S)
-        if not m:
-            raise ValueError("AI nevrátila JSON")
-        variants_raw = json.loads(m.group(0))
-        if not isinstance(variants_raw, list) or len(variants_raw) < 3:
-            raise ValueError("AI nevrátila 3 varianty")
+        generation_mode = "ai"
+        try:
+            if os.environ.get("AI_PROVIDER", "openrouter").lower() == "offline":
+                raise HTTPException(status_code=503, detail="Offline režim nabídek")
+            out = await asyncio.wait_for(_llm_call(sys, prompt), timeout=25)
+            variants_raw = _parse_quote_variants(out)
+        except (HTTPException, ValueError, TypeError, asyncio.TimeoutError) as exc:
+            if isinstance(exc, HTTPException) and exc.status_code not in (502, 503, 504):
+                raise
+            logger.warning("AI quote content unavailable (%s); using calculation drafts", type(exc).__name__)
+            generation_mode = "fallback"
+            variants_raw = [
+                {
+                    "nazev": name,
+                    "rozsah": payload.description.strip() or payload.title.strip(),
+                    "zaruka": "K dohodě dle smlouvy",
+                    "termin": "Bude upřesněn",
+                    "included": ["Rozsah dle zadání zákazníka"],
+                    "excluded": ["Práce a materiály neuvedené v zadání"],
+                    "popis": "Orientační kalkulace bez AI. Rozsah, ceny a termíny vyžadují kontrolu řemeslníkem."
+                }
+                for name in ("Základní", "Zlatá střední cesta", "Premium")
+            ]
 
         prices = [A, B, C]
         defaults_nazev = ["Základní", "Zlatá střední cesta", "Premium"]
@@ -661,8 +762,8 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
             v["cena_kc"] = float(prices[i])
             v["nazev"] = v.get("nazev") or defaults_nazev[i]
             v["rozsah"] = v.get("rozsah", "")
-            v["zaruka"] = v.get("zaruka") or ["24 měsíců", "36 měsíců", "48 měsíců"][i]
-            v["termin"] = v.get("termin") or ["4-6 týdnů", "3-5 týdnů", "2-4 týdny (priorita)"][i]
+            v["zaruka"] = v.get("zaruka") or "Dle smlouvy"
+            v["termin"] = v.get("termin") or "Bude upřesněn"
             v["included"] = v.get("included") or []
             v["excluded"] = v.get("excluded") or []
             v["popis"] = v.get("popis", "")
@@ -689,9 +790,9 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
                 if "rok" in z.lower() or "let" in z.lower():
                     months = months * 12
                 if months > 48:
-                    v["zaruka"] = warranty_defaults[i]
+                    v["zaruka"] = "Dle smlouvy"
             else:
-                v["zaruka"] = warranty_defaults[i]
+                v["zaruka"] = v.get("zaruka") or "Dle smlouvy"
 
         bundle_id = str(uuid.uuid4())
         await db.quote_variants.insert_one({
@@ -699,17 +800,21 @@ async def ai_generate_variants(payload: GenerateVariantsIn, user: dict = Depends
             "user_id": user["id"],
             "input": payload.model_dump(),
             "base_price": base,
+            "generation_mode": generation_mode,
             "variants": variants,
             "created_at": now_utc(),
         })
-        return {"id": bundle_id, "base_price": base, "variants": variants}
+        return {"id": bundle_id, "base_price": base, "variants": variants, "generation_mode": generation_mode}
     except Exception as e:
         logger.exception("ai_generate_variants failed")
         raise HTTPException(500, f"AI selhala: {e}")
 
 # ---------- PDF ----------
 def _czech_currency(n: float) -> str:
-    s = f"{int(round(n)):,}".replace(",", " ")
+    value = round(float(n), 2)
+    s = f"{value:,.2f}".replace(",", " ").replace(".", ",")
+    if s.endswith(",00"):
+        s = s[:-3]
     return f"{s} Kč"
 
 def _czech_date(dt: datetime) -> str:
@@ -730,6 +835,19 @@ def _draw_header_info(canvas, doc, user):
         y -= 10
     if user.get('show_dic') and user.get('dic'):
         canvas.drawString(130*mm, y, f"DIČ: {user['dic']}")
+
+def _draw_pdf_footer(canvas, doc):
+    canvas.saveState()
+    try:
+        canvas.setFont("DejaVu", 8)
+        label = "Vytvořeno Řemeslník Pro"
+    except KeyError:
+        canvas.setFont("Helvetica", 8)
+        label = "Vytvoreno Remeslnik Pro"
+    canvas.setFillColorRGB(0.6, 0.63, 0.67)
+    canvas.drawCentredString(doc.pagesize[0] / 2, 22, label)
+    canvas.restoreState()
+
 
 def _build_pdf_quote(job: dict, user: dict) -> bytes:
     from reportlab.lib.pagesizes import A4
@@ -787,6 +905,21 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     elems.append(t)
     elems.append(Spacer(1, 6))
 
+    from xml.sax.saxutils import escape
+    if job.get("jarvis_description"):
+        elems.append(Paragraph("Rozsah prací", h2))
+        elems.append(Paragraph(escape(job["jarvis_description"]).replace("\n", "<br/>"), body))
+    visual = job.get("jarvis_visual", "")
+    if visual.startswith(("data:image/jpeg;base64,", "data:image/png;base64,")):
+        import base64
+        picture = Image(io.BytesIO(base64.b64decode(visual.split(",", 1)[1])))
+        scale = min(160 * mm / picture.imageWidth, 100 * mm / picture.imageHeight)
+        picture.drawWidth, picture.drawHeight = picture.imageWidth * scale, picture.imageHeight * scale
+        elems.append(Spacer(1, 8))
+        elems.append(picture)
+    if job.get("jarvis_notes"):
+        elems.append(Paragraph(escape(job["jarvis_notes"]).replace("\n", "<br/>"), small))
+
     def section(title: str, lines: list):
         elems.append(Paragraph(title, h2))
         if not lines:
@@ -828,7 +961,7 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     trans = section("Doprava, závoz a manipulace", job.get("doprava", []))
 
     elems.append(Spacer(1, 8))
-    totals = job.get("totals", {})
+    totals = compute_totals(job)
     zaloha_k_uhrade = totals.get("zaloha", (mat + trans) + (0.3 * work))
 
     rec_data = [
@@ -836,10 +969,13 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         ["Cena materiálu:", _czech_currency(mat)],
         ["Doprava a manipulace:", _czech_currency(trans)],
         ["POŽADOVANÁ ZÁLOHA:", _czech_currency(zaloha_k_uhrade)],
-        ["CELKEM:", _czech_currency(work + mat + trans)],
+        ["CELKEM:", _czech_currency(totals["celkem"])],
     ]
     
-    qr_reader = _get_qr_image_reader(user.get("bank_account", ""), zaloha_k_uhrade, f"Zaloha {job['job_number']}", job['id']) if user.get("bank_account") else None
+    if job.get("platce_dph"):
+        rec_data.insert(3, ["DPH 21 %:", _czech_currency(totals["dph_21"])])
+    
+    qr_reader = _get_qr_image_stream(user.get("bank_account", ""), zaloha_k_uhrade, f"Zaloha {job['job_number']}", job['id']) if user.get("bank_account") else None
     
     if qr_reader:
         rec_tbl = Table(rec_data, colWidths=[80*mm, 50*mm])
@@ -861,7 +997,6 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
     ]))
     
     if qr_reader:
-        # ZDE JE TA OPRAVA: Zabalení ImageReaderu do platypus Image objektu pro tabulky
         qr_flowable = Image(qr_reader, width=40*mm, height=40*mm)
         bottom_block = Table([[rec_tbl, qr_flowable]], colWidths=[135*mm, 45*mm])
         bottom_block.setStyle(TableStyle([
@@ -879,10 +1014,9 @@ def _build_pdf_quote(job: dict, user: dict) -> bytes:
         elems.append(Paragraph(job["payment_note"], small))
         elems.append(Spacer(1, 4))
     elems.append(Paragraph("Nabídka platí 30 dní od data vystavení.", small))
-    elems.append(Spacer(1, 14))
-    elems.append(Paragraph("<font color='#9ca3af'>Vytvořeno Řemeslník Pro ™</font>", small))
 
-    doc.build(elems)
+
+    doc.build(elems, onFirstPage=_draw_pdf_footer, onLaterPages=_draw_pdf_footer)
     return buf.getvalue()
 
 def _build_pdf_billing(job: dict, user: dict) -> bytes:
@@ -981,8 +1115,8 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
 
     elems.append(Paragraph("Sekce 4 — Rekapitulace", h2))
     
-    celková_částka = original_total + extra_total
-    totals_billing = job.get("totals", {})
+    totals_billing = compute_totals(job)
+    celková_částka = totals_billing["celkem_k_fakturaci"]
     zaloha_uhrazena = totals_billing.get("zaloha", 0.0)
     k_uhrade_final = max(0.0, celková_částka - zaloha_uhrazena)
 
@@ -993,7 +1127,10 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
         ["DOPLATEK CELKEM:", _czech_currency(k_uhrade_final)],
     ]
     
-    qr_reader_billing = _get_qr_image_reader(user.get("bank_account", ""), k_uhrade_final, f"Doplatek {job['job_number']}", job['id']) if user.get("bank_account") else None
+    if job.get("platce_dph"):
+        rec_data.insert(2, ["DPH 21 %:", _czech_currency(round((original_total + extra_total) * 0.21, 2))])
+    
+    qr_reader_billing = _get_qr_image_stream(user.get("bank_account", ""), k_uhrade_final, f"Doplatek {job['job_number']}", job['id']) if user.get("bank_account") else None
 
     if qr_reader_billing:
         rec = Table(rec_data, colWidths=[80*mm, 50*mm])
@@ -1011,7 +1148,6 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     
     elems.append(Spacer(1, 6))
     if qr_reader_billing:
-        # ZDE JE TA OPRAVA: Zabalení ImageReaderu do platypus Image objektu pro tabulky
         qr_flowable_billing = Image(qr_reader_billing, width=40*mm, height=40*mm)
         bottom_block = Table([[rec, qr_flowable_billing]], colWidths=[135*mm, 45*mm])
         bottom_block.setStyle(TableStyle([
@@ -1027,10 +1163,9 @@ def _build_pdf_billing(job: dict, user: dict) -> bytes:
     elems.append(Spacer(1, 8))
     if job.get("payment_note"):
         elems.append(Paragraph(job["payment_note"], small))
-    elems.append(Spacer(1, 14))
-    elems.append(Paragraph("<font color='#9ca3af'>Vytvořeno Řemeslník Pro ™</font>", small))
 
-    doc.build(elems)
+
+    doc.build(elems, onFirstPage=_draw_pdf_footer, onLaterPages=_draw_pdf_footer)
     return buf.getvalue()
 
 def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
@@ -1086,7 +1221,7 @@ def _build_pdf_variants(variants: list, input_data: dict, user: dict) -> bytes:
             for it in included:
                 elems.append(Paragraph(f"✓ {it}", body))
                 
-            exclude_list = v.get("excluded") or []
+        exclude_list = v.get("excluded") or []
         if exclude_list:
             elems.append(Paragraph("<b>Co v ceně ZAHRNUTO NENÍ:</b>", body))
             for it in exclude_list:
@@ -1562,10 +1697,39 @@ async def startup():
         if owner and owner.get("company_code"):
             await db.employees.update_one({"id": e["id"], "owner_user_id": e["owner_user_id"]}, {"$set": {"company_code": owner["company_code"]}})
 
+    # One-time, staging-only owner reset. The marker prevents deletion of a newly
+    # registered account on later restarts. Never enabled in production.
+    reset_email = os.environ.get("STAGING_ONE_TIME_DELETE_OWNER_EMAIL", "").strip().lower()
+    if os.environ.get("RAILWAY_ENVIRONMENT_NAME") == "staging" and reset_email:
+        marker_id = "staging-owner-delete-v1:" + reset_email
+        marker = await db.maintenance_migrations.find_one({"_id": marker_id})
+        if marker is None:
+            target = await db.users.find_one({"email": reset_email}, {"_id": 1, "id": 1})
+            if target is not None:
+                # Claim the exact account ID before deleting; never delete by
+                # email after the claim, to protect future registrations.
+                try:
+                    await db.maintenance_migrations.insert_one({
+                        "_id": marker_id, "target_user_id": target["id"],
+                        "created_at": now_utc(), "status": "claimed"
+                    })
+                except Exception:
+                    logger.warning("Owner reset migration already claimed")
+                claim = await db.maintenance_migrations.find_one({"_id": marker_id})
+                if claim and claim.get("target_user_id") == target["id"]:
+                    result = await db.users.delete_one({"_id": target["_id"], "id": target["id"]})
+                    await db.maintenance_migrations.update_one({"_id": marker_id}, {"$set": {
+                        "status": "completed", "deleted_count": result.deleted_count,
+                        "completed_at": now_utc()
+                    }})
+                    logger.info("Staging owner reset completed; deleted_count=%d", result.deleted_count)
+            else:
+                logger.info("Staging owner reset: target account not found")
+
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com")
     admin_pass = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})
-    if not existing:
+    if not existing and not (os.environ.get("RAILWAY_ENVIRONMENT_NAME") == "staging" and admin_email.lower() == reset_email):
         code = _gen_company_code()
         while await db.users.find_one({"company_code": code}):
             code = _gen_company_code()
@@ -1585,8 +1749,36 @@ async def startup():
             "logo_path": "",
             "created_at": now_utc(),
         })
-    elif not verify_password(admin_pass, existing["password_hash"]):
-        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pass)}})
+    # Never overwrite an existing owner password during application startup.
+    # Password changes must use an authenticated or verified reset flow.
+
+from jarvis_addon import create_router as create_jarvis_addon_router, Plan as JarvisPlan
+
+async def create_jarvis_job(draft, user, job_id):
+    plan = JarvisPlan.model_validate(draft["plan"])
+    def items(rows):
+        return [dict(id=str(uuid.uuid4()), **item.model_dump()) for item in rows]
+    job = {
+        "_id": job_id, "id": job_id, "user_id": user["id"], "job_number": await next_job_number(user["id"]),
+        "title": draft["title"], "client_name": draft["client_name"], "address": draft["address"],
+        "prace": items(plan.prace), "material": items(plan.material), "doprava": items(plan.doprava),
+        "vicepracovne": [], "material_navic": [], "diary_entries": [],
+        "status": "rozpracovano", "finalized": False, "photo_url": "",
+        "payment_note": "", "zaloha_castka": None, "created_at": now_utc(), "updated_at": now_utc(),
+        "jarvis_draft_id": draft["id"], "jarvis_description": draft["description"],
+        "jarvis_notes": plan.poznamky, "platce_dph": plan.platce_dph,
+        "jarvis_visual": draft.get("edit_visual") or draft.get("schema_visual") or "",
+    }
+    await db.jobs.insert_one(job.copy())
+    return job
+
+jarvis_addon = create_jarvis_addon_router(db, get_current_user, create_jarvis_job, JobCreate)
+app.include_router(jarvis_addon, prefix="/api")
+from jarvis_billing import create_router as create_jarvis_billing_router
+app.include_router(create_jarvis_billing_router(db, get_current_user), prefix="/api")
+
+from jarvis_integration import create_router as create_jarvis_integration_router
+app.include_router(create_jarvis_integration_router(db, get_current_user), prefix="/api")
 
 @app.on_event("shutdown")
 async def shutdown():

@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { theme, fmtCZK } from "../theme";
 
@@ -19,6 +19,18 @@ export function newRow(): LineItem {
     jednotka: "ks",
     cena: 0,
   };
+}
+
+function DecimalInput({ value, onCommit, testID }: { value: number; onCommit: (n: number) => void; testID: string }) {
+  const [text, setText] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => { if (!focused) setText(String(value)); }, [value, focused]);
+  return <TextInput value={text} onFocus={() => setFocused(true)} onBlur={() => {
+    setFocused(false);
+    const n = Number(text.replace(/\s/g, "").replace(",", "."));
+    if (text.trim() !== "" && Number.isFinite(n) && n >= 0) onCommit(n);
+    else setText(String(value));
+  }} onChangeText={setText} keyboardType="decimal-pad" style={styles.cellInput} testID={testID} />;
 }
 
 export function LineItemEditor({
@@ -73,13 +85,7 @@ export function LineItemEditor({
           <View style={styles.gridLine}>
             <View style={[styles.cell, { flex: 1.1 }]}>
               <Text style={styles.cellLabel}>Množství</Text>
-              <TextInput
-                value={String(r.mnozstvi)}
-                onChangeText={(t) => update(i, "mnozstvi", t)}
-                keyboardType="numeric"
-                style={styles.cellInput}
-                testID={`${testIDPrefix}-mn-${i}`}
-              />
+              <DecimalInput value={r.mnozstvi} onCommit={(n) => update(i, "mnozstvi", String(n))} testID={`${testIDPrefix}-mn-${i}`} />
             </View>
             <View style={[styles.cell, { flex: 1 }]}>
               <Text style={styles.cellLabel}>Jednotka</Text>
@@ -92,13 +98,7 @@ export function LineItemEditor({
             </View>
             <View style={[styles.cell, { flex: 1.4 }]}>
               <Text style={styles.cellLabel}>Cena/jedn.</Text>
-              <TextInput
-                value={String(r.cena)}
-                onChangeText={(t) => update(i, "cena", t)}
-                keyboardType="numeric"
-                style={styles.cellInput}
-                testID={`${testIDPrefix}-cena-${i}`}
-              />
+              <DecimalInput value={r.cena} onCommit={(n) => update(i, "cena", String(n))} testID={`${testIDPrefix}-cena-${i}`} />
             </View>
           </View>
           <Text style={styles.lineTotal}>Celkem: {fmtCZK((r.mnozstvi || 0) * (r.cena || 0))}</Text>

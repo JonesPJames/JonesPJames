@@ -83,8 +83,9 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 export function fmtCZK(n: number | undefined | null): string {
-  const v = Math.round(Number(n || 0));
-  return v.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " Kč";
+  const v = Number(n || 0);
+  const [whole, cents] = (Number.isFinite(v) ? Math.round(v * 100) / 100 : 0).toFixed(2).split(".");
+  return whole.replace(/\B(?=(\d{3})+(?!\d))/g, " ") + (cents === "00" ? "" : "," + cents) + " Kč";
 }
 
 export function fmtDateCZ(iso: string | Date): string {
@@ -93,3 +94,4 @@ export function fmtDateCZ(iso: string | Date): string {
   if (isNaN(d.getTime())) return "";
   return `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`;
 }
+

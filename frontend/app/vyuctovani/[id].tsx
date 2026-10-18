@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -29,7 +29,7 @@ export default function Vyuctovani() {
   const [paymentNote, setPaymentNote] = useState("");
   const saveTimer = React.useRef<any>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const r = await api.get(`/jobs/${id}`);
       setJob(r.data);
@@ -40,11 +40,11 @@ export default function Vyuctovani() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
 
   useEffect(() => {
     load();
-  }, [id]);
+  }, [load]);
 
   async function patch(payload: any) {
     const r = await api.put(`/jobs/${id}`, payload);
@@ -57,7 +57,7 @@ export default function Vyuctovani() {
     saveTimer.current = setTimeout(async () => {
       try {
         await patch(next);
-      } catch (e) {
+      } catch {
         // silent autosave
       }
     }, 500);
@@ -177,9 +177,10 @@ export default function Vyuctovani() {
           <View style={styles.recapCard}>
             <Row label="Původní nabídka celkem" value={fmtCZK(original)} />
             <Row label="Vícepráce celkem" value={fmtCZK(extra)} />
+            {job.platce_dph?<Row label="DPH 21 %" value={fmtCZK((original+extra)*0.21)} />:null}
             <View style={styles.bigTotal}>
               <Text style={styles.bigTotalLabel}>CELKEM K FAKTURACI</Text>
-              <Text style={styles.bigTotalVal}>{fmtCZK(original + extra)}</Text>
+              <Text style={styles.bigTotalVal}>{fmtCZK(t.celkem_k_fakturaci ?? original + extra)}</Text>
             </View>
           </View>
 
@@ -290,3 +291,4 @@ const styles = StyleSheet.create({
   bigTotalLabel: { color: theme.colors.text, fontWeight: "800", fontSize: 14, letterSpacing: 1.4 },
   bigTotalVal: { color: theme.colors.text, fontWeight: "800", fontSize: 28 },
 });
+

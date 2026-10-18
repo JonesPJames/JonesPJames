@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Řemeslník Pro",
+    "name": "Řemeslník Pro JARVIS",
     "slug": "remeslnik-pro",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "remeslnikpro",
@@ -18,8 +18,9 @@
         "backgroundColor": "#121212"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.jpjones.frontend",
-      "usesCleartextTraffic": true
+      "package": "com.jpjones.remeslnikjarvis.debug",
+      "usesCleartextTraffic": true,
+      "versionCode": 3
     },
     "web": {
       "bundler": "metro",

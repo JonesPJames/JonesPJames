@@ -58,30 +58,37 @@ export default function ZakazkaDetail() {
   }
 
   async function resolveProposal(propId: string, action: "approve" | "reject") {
-    if (action === "approve") {
-      Alert.prompt
-        ? Alert.prompt("Cena za jednotku", "Zadejte cenu (Kč)", async (price) => {
-            try {
-              const r = await api.post(`/jobs/${id}/proposals/${propId}/resolve`, { action, cena: parseFloat(price || "0") || 0 });
-              setJob(r.data);
-            } catch (e: any) { Alert.alert("Chyba", getApiErrorMessage(e)); }
-          }, "plain-text", "0", "numeric")
-        : (async () => {
-            try {
-              const r = await api.post(`/jobs/${id}/proposals/${propId}/resolve`, { action, cena: 0 });
-              setJob(r.data);
-              Alert.alert("Návrh schválen", "Cenu nastavte v tabulce Vícepráce v deníku.");
-            } catch (e: any) { Alert.alert("Chyba", getApiErrorMessage(e)); }
-          })();
-    } else {
+    async function resolve(cena: number) {
       try {
-        const r = await api.post(`/jobs/${id}/proposals/${propId}/resolve`, { action, cena: 0 });
+        const r = await api.post(`/jobs/${id}/proposals/${propId}/resolve`, { action, cena });
         setJob(r.data);
+        if (action === "approve" && Platform.OS !== "ios") {
+          Alert.alert("Návrh schválen", "Cenu nastavte v tabulce Vícepráce v deníku.");
+        }
       } catch (e: any) { Alert.alert("Chyba", getApiErrorMessage(e)); }
+    }
+
+    if (action === "approve") {
+      if (Platform.OS === "ios") {
+        Alert.prompt("Cena za jednotku", "Zadejte cenu (Kč)", async (price) => {
+          await resolve(parseFloat(price || "0") || 0);
+        }, "plain-text", "0", "numeric");
+      } else if (Platform.OS === "web") {
+        if (typeof window !== "undefined" && window.confirm("Schválit vícepráce s cenou 0 Kč? Cenu potom nastavte v tabulce Vícepráce v deníku.")) {
+          await resolve(0);
+        }
+      } else {
+        Alert.alert("Schválit vícepráce?", "Návrh bude schválen s cenou 0 Kč. Cenu potom nastavte v tabulce Vícepráce v deníku.", [
+          { text: "Zrušit", style: "cancel" },
+          { text: "Schválit", onPress: () => resolve(0) },
+        ]);
+      }
+    } else {
+      await resolve(0);
     }
   }
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const r = await api.get(`/jobs/${id}`);
       setJob(r.data);
@@ -90,11 +97,11 @@ export default function ZakazkaDetail() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
 
   useEffect(() => {
     load();
-  }, [id]);
+  }, [load]);
 
   // Debounced auto-save on changes
   function update(patch: any) {
@@ -183,9 +190,9 @@ export default function ZakazkaDetail() {
     const url = pdfUrl(`/api/jobs/${id}/pdf`);
     try {
       const token = await (await import("@react-native-async-storage/async-storage")).default.getItem("rp_token");
-      Linking.openURL(`${url}?token=${token}`);
+      await Linking.openURL(`${url}?token=${encodeURIComponent(token || "")}`);
     } catch {
-      Linking.openURL(url);
+      Alert.alert("PDF", "Nepodařilo se otevřít PDF. Přihlaste se znovu a zkuste to opakovat.");
     }
   }
 
@@ -278,6 +285,7 @@ export default function ZakazkaDetail() {
               </View>
             </View>
 
+            {job.platce_dph?<Text style={styles.sumLabel}>Základ {fmtCZK(totals.bez_dph)} · DPH 21 % {fmtCZK(totals.dph_21)}</Text>:null}
             <View style={styles.sumTotalRow}>
               <Text style={styles.sumTotalLabel}>CELKEM</Text>
               <Text style={styles.sumTotalVal}>{fmtCZK(totals.celkem)}</Text>
@@ -669,3 +677,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 });
+

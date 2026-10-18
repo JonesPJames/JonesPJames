@@ -1,0 +1,20 @@
+name: JARVIS paid add-on tests
+on:
+  push:
+    branches: [feature/jarvis-addon-20261018]
+    paths: ['backend/**', '.github/workflows/jarvis-addon.yml']
+  pull_request:
+    branches: [main]
+    paths: ['backend/**', '.github/workflows/jarvis-addon.yml']
+permissions:
+  contents: read
+jobs:
+  addon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r backend/requirements.txt mongomock-motor==0.0.36
+      - run: python -m pytest backend/tests/test_jarvis_addon.py backend/tests/test_jarvis_billing.py backend/tests/test_clients.py backend/tests/test_jarvis_client_integration.py backend/tests/test_jarvis_integration.py backend/tests/test_jarvis_mobile_contract.py backend/tests/test_quote_generation.py -q

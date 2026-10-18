@@ -9,6 +9,8 @@ export type User = {
   company: string;
   phone: string;
   company_code: string;
+  show_ico?: boolean;
+  show_dic?: boolean;
   ico?: string;
   dic?: string;
   bank_account?: string; // Rozšíření typu uživatele o číslo účtu / IBAN
@@ -55,25 +57,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
-      const t = await AsyncStorage.getItem(TOKEN_KEY);
-      const r = await AsyncStorage.getItem(ROLE_KEY);
-      if (t) {
+    let active = true;
+    const restoreSession = async () => {
+      try {
+        const t = await AsyncStorage.getItem(TOKEN_KEY);
+        const role = await AsyncStorage.getItem(ROLE_KEY);
+        if (!t) return;
         try {
-          if (r === "employee") {
-            const res = await api.get("/auth/me-employee");
-            setActor({ role: "employee", employee: res.data });
-          } else {
-            const res = await api.get("/auth/me");
-            setActor({ role: "owner", user: res.data });
+          const endpoint = role === "employee" ? "/auth/me-employee" : "/auth/me";
+          const res = await api.get(endpoint, { timeout: 10000 });
+          if (active) {
+            if (role === "employee") setActor({ role: "employee", employee: res.data });
+            else setActor({ role: "owner", user: res.data });
           }
-        } catch {
-          await setToken(null);
-          await AsyncStorage.removeItem(ROLE_KEY);
+        } catch (error: any) {
+          // A temporary network failure must not silently erase a valid login.
+          // Only reject a stored session if the server explicitly rejects it.
+          if (error?.response?.status === 401 || error?.response?.status === 403) {
+            try {
+              await setToken(null);
+              await AsyncStorage.removeItem(ROLE_KEY);
+            } catch (storageError) {
+              console.warn("Unable to clear expired session", storageError);
+            }
+          }
         }
+      } catch (error) {
+        console.warn("Session initialization failed", error);
+      } finally {
+        if (active) setLoading(false);
       }
-      setLoading(false);
-    })();
+    };
+    void restoreSession();
+    return () => { active = false; };
   }, []);
 
   async function loginOwner(email: string, password: string) {

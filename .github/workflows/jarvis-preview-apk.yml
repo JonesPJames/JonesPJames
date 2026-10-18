@@ -1,0 +1,47 @@
+name: JARVIS internal Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - work/jarvis-sop-api-20261014
+    paths:
+      - '.github/workflows/jarvis-preview-apk.yml'
+      - 'frontend/**'
+      - 'backend/server.py'
+      - 'backend/tests/**'
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install pytest
+      - run: python -m pytest -q backend/tests/test_clients.py backend/tests/test_jarvis_mobile_contract.py backend/tests/test_jarvis_client_integration.py
+  build:
+    if: github.event_name == 'workflow_dispatch'
+    needs: backend-test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - name: Verify Expo access
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Missing EXPO_TOKEN repository secret. Configure Expo access before running preview build."
+            exit 1
+          fi
+      - name: Build internal Android APK
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          CI: '1'
+        run: npx eas-cli@25.1.1 build --platform android --profile preview --non-interactive --wait
