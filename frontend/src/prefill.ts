@@ -1,7 +1,8 @@
-/** Tiny module-level state for prefilling Nová zakázka from Kalkulačka or Import. */
+/** Tiny module-level state for prefilling Nová zakázka from Kalkulačka, Import or the client card. */
 import type { LineItem } from "./components/LineItemEditor";
 
 type Prefill = {
+  client_name?: string;
   title?: string;
   prace?: LineItem[];
   material?: LineItem[];

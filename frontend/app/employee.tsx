@@ -40,7 +40,7 @@ export default function EmployeeHome() {
 
   useEffect(() => {
     if (!loading && !employee) router.replace("/login");
-  }, [loading, employee]);
+  }, [loading, employee, router]);
 
   useFocusEffect(useCallback(() => { load(); }, []));
 

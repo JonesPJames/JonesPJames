@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -29,7 +29,7 @@ export default function Vyuctovani() {
   const [paymentNote, setPaymentNote] = useState("");
   const saveTimer = React.useRef<any>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const r = await api.get(`/jobs/${id}`);
       setJob(r.data);
@@ -40,11 +40,11 @@ export default function Vyuctovani() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
 
   useEffect(() => {
     load();
-  }, [id]);
+  }, [load]);
 
   async function patch(payload: any) {
     const r = await api.put(`/jobs/${id}`, payload);
@@ -57,7 +57,7 @@ export default function Vyuctovani() {
     saveTimer.current = setTimeout(async () => {
       try {
         await patch(next);
-      } catch (e) {
+      } catch {
         // silent autosave
       }
     }, 500);

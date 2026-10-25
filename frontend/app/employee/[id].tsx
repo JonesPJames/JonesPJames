@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -55,7 +55,7 @@ export default function EmployeeJobDetail() {
 
   const [saving, setSaving] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const r = await api.get(`/employee/jobs/${id}`);
       setJob(r.data);
@@ -81,8 +81,8 @@ export default function EmployeeJobDetail() {
     } finally {
       setLoading(false);
     }
-  }
-  useEffect(() => { load(); }, [id]);
+  }, [id, employee?.id, employee?.trade]);
+  useEffect(() => { load(); }, [load]);
 
   async function submitDiary() {
     if (!dWork.trim()) return Alert.alert("Vyplňte popis prací");
@@ -149,7 +149,7 @@ export default function EmployeeJobDetail() {
           basic_tools: chosenBasic,
           extra_tools: extras.filter((e) => e.trim()),
         });
-      } catch (e: any) {
+      } catch {
         // silent
       } finally {
         setClSaving(false);

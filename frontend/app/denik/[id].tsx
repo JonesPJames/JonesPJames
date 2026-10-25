@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Platform,
   Image,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppFooter } from "../../src/components/AppFooter";
@@ -25,13 +25,12 @@ import { api, getApiErrorMessage } from "../../src/api";
 
 export default function Denik() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   const [job, setJob] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState({ date: new Date().toISOString().slice(0, 10), work: "", weather: "", workers: "", notes: "", photo_base64: "" });
   const [saving, setSaving] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const r = await api.get(`/jobs/${id}`);
       setJob(r.data);
@@ -40,11 +39,11 @@ export default function Denik() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
 
   useEffect(() => {
     load();
-  }, [id]);
+  }, [load]);
 
   async function patch(payload: any) {
     const r = await api.put(`/jobs/${id}`, payload);

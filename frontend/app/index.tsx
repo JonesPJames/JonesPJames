@@ -13,7 +13,7 @@ export default function Index() {
     if (!actor) router.replace("/login");
     else if (actor.role === "owner") router.replace("/home");
     else router.replace("/employee");
-  }, [loading, actor]);
+  }, [loading, actor, router]);
 
   return (
     <View style={styles.c} testID="splash-loader">

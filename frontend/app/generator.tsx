@@ -5,13 +5,11 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
   Linking,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppFooter } from "../src/components/AppFooter";
 import { AppHeader } from "../src/components/AppHeader";
@@ -37,7 +35,6 @@ const KLIENT = [
 ];
 
 const ICONS = ["🥉", "🥇", "💎"];
-const VARIANT_COLORS = ["#a37852", "#c9820a", "#1f3a5f"];
 
 export default function Generator() {
   const [form, setForm] = useState({

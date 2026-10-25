@@ -10,7 +10,6 @@
     "strict": true,
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
-    "ignoreDeprecations": "6.0",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
