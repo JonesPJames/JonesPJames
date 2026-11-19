@@ -1,5 +1,5 @@
 FROM python:3.12-slim
 WORKDIR /app
-COPY vs_market_data.py global_market.py ./
+COPY vs_market_data.py global_market.py paper_engine.py ./
 ENV PYTHONUNBUFFERED=1
-CMD ["sh","-c","python -u vs_market_data.py & python -u global_market.py & wait"]
+CMD ["sh","-c","python -u vs_market_data.py & python -u global_market.py & python -u paper_engine.py & wait"]
