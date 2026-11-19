@@ -9,6 +9,7 @@ def score(rows):
  trend=(latest[1]/old[1]-1)*100
  return {"last":latest[1],"last_utc":latest[0],"change_pct":round(change,4),"trend_pct":round(trend,4),"direction":"UP" if trend>0 else "DOWN","quality":"INDICATIVE_ONLY_NO_FILL"}
 def run(db):
+ db.execute('PRAGMA busy_timeout=30000')
  db.execute("CREATE TABLE IF NOT EXISTS cross_asset_intents(id TEXT PRIMARY KEY,symbol TEXT,created_utc TEXT,limit_price TEXT,stop_price TEXT,take_price TEXT,notional TEXT,status TEXT,reason TEXT)")
  db.execute("CREATE TABLE IF NOT EXISTS cross_asset_signals(symbol TEXT PRIMARY KEY,observed_utc TEXT,signal TEXT,source TEXT)")
  symbols=[r[0] for r in db.execute("SELECT DISTINCT symbol FROM global_quotes").fetchall()]
