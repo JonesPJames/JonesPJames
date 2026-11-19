@@ -48,6 +48,16 @@ def exits(db):
     db.execute("UPDATE v2_orders SET status='CLOSED' WHERE id=?",(oid,))
    logging.warning("V2_PAPER_EXIT_NEEDS_SHEETS_SYNC %s",json.dumps(data))
    break
+def cross_asset_intake(db):
+ try:
+  rows=db.execute("SELECT id,symbol,limit_price,stop_price,take_price,notional,status FROM cross_asset_intents WHERE status='DATA_ONLY' LIMIT 100").fetchall()
+ except sqlite3.OperationalError:
+  return
+ for oid,sym,limit,stop,take,notional,status in rows:
+  # The cross-asset scanner provides indicative bars, not an executable tape.
+  # Keep these intents visible but never manufacture a paper fill.
+  logging.info("CROSS_ASSET_INTENT %s %s limit=%s status=DATA_ONLY",oid,sym,limit)
+
 def main():
  logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(message)s')
  db=sqlite3.connect(DB,timeout=30);db.execute("PRAGMA journal_mode=WAL");setup(db)
@@ -56,7 +66,7 @@ def main():
   db.execute("INSERT OR IGNORE INTO v2_orders(id,symbol,created_ns,limit_price,notional,stop,take) VALUES(?,?,?,?,?,?,?)",(oid,sym,now,limit,'100',sl,tp))
  db.commit()
  while True:
-  try:cycle(db);exits(db)
+  try:cycle(db);exits(db);cross_asset_intake(db)
   except Exception:logging.exception("V2_ENGINE_ERROR")
   time.sleep(15)
 if __name__=='__main__':main()
