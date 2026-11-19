@@ -1,0 +1,1 @@
+V$ isolated branch. Kraken BTC/ETH raw trades to SQLite. Does NOT simulate fills, trade stocks, or write Google Sheets. DB_PATH must be on persistent Railway volume. This is infrastructure only, not complete autonomous trading.
