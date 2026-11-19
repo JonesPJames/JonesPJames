@@ -51,7 +51,7 @@ def reconcile(db,api):
      write('Obchody',trow,[oid,'I1U',payload['symbol'],'BUY',ts,'',debit,payload['price'],payload['qty'],payload['stop'],payload['take'],'',.002,.002,'OTEVŘEN — SIMULACE',0,'Kraken tick '+ts,'event_id='+event_id+'; execution_proof=false']),
      write('Toky',frow,[ts,'I1U — HOTOVOST','I1U — OTEVŘENÉ POZICE',debit,event_id,'Simulovaný nákup včetně fee','Kraken; execution_proof=false'])])
   elif kind=='SELL':
-   if not (orow and trow):raise RuntimeError('missing original BUY '+oid)
+   if not any(r and r[0]==oid for r in orders[1:]) or not any(r and r[0]==oid for r in trades[1:]):raise RuntimeError('missing original BUY '+oid)
    if not frow:
     ts=stamp(payload['ts_ns']);credit=Decimal(payload['cash_delta'])
     api.batch([write('Toky',len(flows)+1,[ts,'I1U — OTEVŘENÉ POZICE','I1U — HOTOVOST',credit,event_id,'Simulovaný prodej včetně fee','Kraken; execution_proof=false'])])
