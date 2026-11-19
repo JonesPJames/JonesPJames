@@ -59,9 +59,18 @@ def reconcile(db,api):
    trades=api.get('Obchody','A1:R1000');trow=next((i+2 for i,r in enumerate(trades[1:]) if r and r[0]==oid),None)
    if not trow:raise RuntimeError('missing trade '+oid)
    old=trades[trow-1];old=old+['']*(18-len(old))
-   old[5]=stamp(payload['ts_ns']);old[11]=str(payload['price']);old[14]='UZAVŘEN — SIMULACE';old[15]=str(payload['pnl']);old[17]=str(old[17])+'; event_id='+event_id
+   old[5]=stamp(payload['ts_ns']);old[11]=str(payload['price']);old[14]='UZAVŘEN — SIMULACE';old[15]=str(payload['pnl'])
+   if event_id not in str(old[17]):old[17]=str(old[17])+'; event_id='+event_id
    api.batch([write('Obchody',trow,old)])
   else:raise RuntimeError('unknown event '+kind)
+  # Reconcile cash and reserves from durable ledger, not from spreadsheet arithmetic.
+  # Existing legacy orders retain their separate reservation.
+  from engine_v3 import INITIAL,LEGACY_RESERVED
+  total_cash=INITIAL+sum((Decimal(p['cash_delta']) for _,_,p in e.events()),Decimal(0))
+  open_cost=sum((-Decimal(p['cash_delta']) for k,oid2,p in e.events() if k=='BUY' and e.status(oid2)=='OPEN'),Decimal(0))
+  reserved=LEGACY_RESERVED+e.reserved()
+  free=total_cash-reserved
+  api.batch([write('Panel',3,['I1U — účetní hotovost',total_cash,'V3 ledger, after fees']),write('Panel',6,['Rezervace čekajících limitů I1U',reserved,'Legacy + V3 waiting']),write('Panel',7,['Vložené prostředky otevřených I1U',open_cost,'V3 open positions']),write('Panel',8,['I1U — k dispozici',free,'Cash minus reservations'])])
   # ACK only after reading the expected event IDs back from the provider.
   orders=api.get('Příkazy','A1:N1000');trades=api.get('Obchody','A1:R1000');flows=api.get('Toky','A1:G1000')
   if kind=='BUY':
@@ -69,6 +78,8 @@ def reconcile(db,api):
   else:
    valid=bool(locate(flows,event_id,4) and locate(trades,event_id,17))
   if not valid:raise RuntimeError('Sheets read-back failed '+event_id)
+  panel=api.get('Panel','A1:C12')
+  if len(panel)<8 or abs(Decimal(str(panel[2][1]))-total_cash)>Decimal('.00001') or abs(Decimal(str(panel[7][1]))-free)>Decimal('.00001'):raise RuntimeError('Panel read-back failed '+event_id)
   with db:
    db.execute('UPDATE sync_outbox SET delivered=1 WHERE event_id=? AND delivered=0',(event_id,))
   logging.info('SHEETS_ACK %s',event_id);done+=1
