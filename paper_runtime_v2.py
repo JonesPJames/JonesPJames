@@ -21,7 +21,7 @@ def cycle(db):
   rows=db.execute("SELECT ts_ns,price,volume,side FROM trades WHERE exchange='kraken' AND symbol=? AND ts_ns>? ORDER BY ts_ns LIMIT 10000",(sym,created)).fetchall()
   for ts,price,volume,side in rows:
    p=dec(price)
-   if p>=lim or dec(volume)<qty or p*dec('1.001')>lim:continue
+   if p>=lim or p*dec('1.001')<=sl or dec(volume)<qty or p*dec('1.001')>lim:continue
    cost=qty*p*dec('1.001')*dec('1.002')
    spent=sum((dec(json.loads(x[0])['cost']) for x in db.execute("SELECT payload FROM v2_events WHERE event='BUY'").fetchall()),dec(0))
    if cost+spent>dec('327.73925'):break
