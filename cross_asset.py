@@ -21,6 +21,7 @@ def run(db):
   if (datetime.datetime.now(datetime.timezone.utc)-ts).total_seconds()>3600:continue
   db.execute("INSERT INTO cross_asset_signals VALUES(?,?,?,?) ON CONFLICT(symbol) DO UPDATE SET observed_utc=excluded.observed_utc,signal=excluded.signal,source=excluded.source",(sym,result['last_utc'],json.dumps(result),"global_quotes"))
   n+=1
+  db.commit()
   if result['direction']!='UP' or result['change_pct']<=0 or result['change_pct']>3:continue
   # Record non-executable intent; indicative bars must never be treated as trade prints.
   if sym.endswith('=X'):continue
@@ -33,7 +34,7 @@ def run(db):
  logging.info("CROSS_ASSET_SCAN valid=%s total=%s; NO_EQUITY_FILLS_WITHOUT_TRADE_TAPE",n,len(symbols))
 if __name__=="__main__":
  logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
- db=sqlite3.connect(DB,timeout=30)
+ db=sqlite3.connect(DB,timeout=30);db.execute('PRAGMA busy_timeout=30000');db.execute('PRAGMA journal_mode=WAL')
  while True:
   try:run(db)
   except Exception:logging.exception("CROSS_ASSET_SCAN_ERROR")
