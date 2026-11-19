@@ -7,7 +7,7 @@ def get(url):
  with urllib.request.urlopen(req,timeout=15) as response:return json.load(response)
 def setup():
  os.makedirs(os.path.dirname(os.path.abspath(DB)),exist_ok=True)
- con=sqlite3.connect(DB)
+ con=sqlite3.connect(DB,timeout=30);con.execute('PRAGMA busy_timeout=30000');con.execute('PRAGMA journal_mode=WAL')
  con.execute("CREATE TABLE IF NOT EXISTS trades(exchange TEXT,symbol TEXT,ts_ns INTEGER,price REAL,volume REAL,side TEXT,PRIMARY KEY(exchange,symbol,ts_ns,price,volume,side))")
  con.execute("CREATE TABLE IF NOT EXISTS cursors(symbol TEXT PRIMARY KEY,since TEXT)")
  con.commit();return con
