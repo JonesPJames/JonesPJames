@@ -20,6 +20,9 @@ def cycle(db):
    # Conservative paper model: an observed close strictly below limit,
    # subsequent to intent creation, can be used only as a modeled entry.
    if D(px)>=D(limit):continue
+   spent=sum((D(json.loads(x[0])['debit']) for x in db.execute("SELECT payload FROM equity_paper_events WHERE event='BUY'").fetchall()),D(0))
+   if spent+D(nom)*D('1.003')>D('327.73925'):continue
+   if D(nom)*(D(limit)-D(stop))/D(limit)+D(nom)*D('.006')>D(10):continue
    qty=D(nom)/D(limit)
    gross=qty*D(limit)
    fee=gross*D('.002')
