@@ -24,7 +24,7 @@ def fetch(symbol):
  ts,price=pairs[-1]
  return {"symbol":symbol,"price":price,"quote_utc":datetime.datetime.fromtimestamp(ts,datetime.timezone.utc).isoformat(),"currency":meta.get("currency"),"exchange":meta.get("exchangeName"),"market_state":meta.get("marketState"),"source":url,"quality":"INDICATIVE_BAR_NOT_FILL"}
 def scan(db):
- con=sqlite3.connect(db);con.execute("CREATE TABLE IF NOT EXISTS global_quotes(symbol TEXT,ts_utc TEXT,price REAL,currency TEXT,exchange TEXT,market_state TEXT,source TEXT,quality TEXT,received_utc TEXT,PRIMARY KEY(symbol,ts_utc))")
+ con=sqlite3.connect(db,timeout=30);con.execute('PRAGMA busy_timeout=30000');con.execute('PRAGMA journal_mode=WAL');con.execute("CREATE TABLE IF NOT EXISTS global_quotes(symbol TEXT,ts_utc TEXT,price REAL,currency TEXT,exchange TEXT,market_state TEXT,source TEXT,quality TEXT,received_utc TEXT,PRIMARY KEY(symbol,ts_utc))")
  symbols=list(dict.fromkeys(s for group in WATCH.values() for s in group))
  def one(symbol):
   try:return fetch(symbol)
@@ -34,6 +34,7 @@ def scan(db):
   for item in pool.map(one,symbols):
    if not item:continue
    con.execute("INSERT OR IGNORE INTO global_quotes VALUES(?,?,?,?,?,?,?,?,?)",(item["symbol"],item["quote_utc"],item["price"],item["currency"],item["exchange"],item["market_state"],item["source"],item["quality"],datetime.datetime.now(datetime.timezone.utc).isoformat()))
+   con.commit()
    logging.info("GLOBAL_QUOTE %s %s %s %s",item["symbol"],item["price"],item["currency"],item["quote_utc"])
  con.commit();con.close()
 if __name__=="__main__":
