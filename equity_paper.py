@@ -17,6 +17,9 @@ def cycle(db):
    if not q:continue
    ts,px,currency,quality=q
    if currency!='USD' or quality!='INDICATIVE_BAR_NOT_FILL':continue
+   # Fail closed: an indicative close is not executable bid/ask or a trade print.
+   # Do not debit portfolio or mark OPEN until an execution-quality adapter exists.
+   continue
    # Conservative paper model: an observed close strictly below limit,
    # subsequent to intent creation, can be used only as a modeled entry.
    if D(px)>=D(limit):continue
