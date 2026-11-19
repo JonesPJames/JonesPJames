@@ -23,6 +23,24 @@ def cycle(db):
     db.execute("INSERT OR IGNORE INTO v2_events VALUES(?,?,?,?,?)",(oid+':BUY',oid,'BUY',json.dumps(data),ts))
     db.execute("UPDATE v2_orders SET status='OPEN' WHERE id=?",(oid,))
    logging.warning("V2_PAPER_BUY_NEEDS_SHEETS_SYNC %s",json.dumps(data));break
+def exits(db):
+ for oid,sym,created,limit,nom,stop,take,status in db.execute("SELECT * FROM v2_orders WHERE status='OPEN'").fetchall():
+  row=db.execute("SELECT payload,ts_ns FROM v2_events WHERE id=?",(oid+':BUY',)).fetchone()
+  if not row:continue
+  entry=json.loads(row[0]);start=row[1];qty=dec(entry['quantity'])
+  ticks=db.execute("SELECT ts_ns,price,volume FROM trades WHERE exchange='kraken' AND symbol=? AND ts_ns>? ORDER BY ts_ns LIMIT 10000",(sym,start)).fetchall()
+  for ts,price,vol in ticks:
+   p=dec(price)
+   if dec(vol)<qty or (p>dec(stop) and p<dec(take)):continue
+   exit_price=p*dec('.999')
+   proceeds=qty*exit_price*dec('.998')
+   pnl=proceeds-dec(entry['cost'])
+   data=dict(order_id=oid,symbol=sym,ts_ns=ts,price=str(exit_price),quantity=str(qty),proceeds=str(proceeds),pnl=str(pnl),fee=str(qty*exit_price*dec('.002')),reason='STOP' if p<=dec(stop) else 'TAKE',source='kraken',status='SIMULOVANY_EXIT')
+   with db:
+    db.execute("INSERT OR IGNORE INTO v2_events VALUES(?,?,?,?,?)",(oid+':SELL',oid,'SELL',json.dumps(data),ts))
+    db.execute("UPDATE v2_orders SET status='CLOSED' WHERE id=?",(oid,))
+   logging.warning("V2_PAPER_EXIT_NEEDS_SHEETS_SYNC %s",json.dumps(data))
+   break
 def main():
  logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)s %(message)s')
  db=sqlite3.connect(DB,timeout=30);db.execute("PRAGMA journal_mode=WAL");setup(db)
@@ -31,7 +49,7 @@ def main():
   db.execute("INSERT OR IGNORE INTO v2_orders(id,symbol,created_ns,limit_price,notional,stop,take) VALUES(?,?,?,?,?,?,?)",(oid,sym,now,limit,'100',sl,tp))
  db.commit()
  while True:
-  try:cycle(db)
+  try:cycle(db);exits(db)
   except Exception:logging.exception("V2_ENGINE_ERROR")
   time.sleep(15)
 if __name__=='__main__':main()
