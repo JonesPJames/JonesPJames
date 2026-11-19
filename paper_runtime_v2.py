@@ -1,5 +1,9 @@
 import os,time,sqlite3,json,datetime,logging
 from decimal import Decimal
+import importlib.util
+_gate_spec=importlib.util.spec_from_file_location('quant_position_gate','/app/vendor/artheras/execution-position/position_gate.py')
+_gate_mod=importlib.util.module_from_spec(_gate_spec)
+_gate_spec.loader.exec_module(_gate_mod)
 DB=os.getenv("DB_PATH","/data/market.db")
 def dec(x):return Decimal(str(x))
 def setup(db):
@@ -10,6 +14,9 @@ def cycle(db):
  for oid,sym,created,limit,nom,stop,take,status in db.execute("SELECT * FROM v2_orders WHERE status='WAITING'").fetchall():
   lim,nom,sl,tp=map(dec,(limit,nom,stop,take))
   if not sl<lim<tp or nom*(lim-sl)/lim+nom*dec('.006')>10:continue
+  gate=_gate_mod.run_gate({'order':{'symbol':sym,'side':'buy','price':float(lim),'stop_price':float(sl),'execution':'paper','sizing':{'method':'fixed_weight','weight':float(nom/dec('1000'))}},'portfolio':{'equity':1000,'cash':327.73925,'positions':{}},'limits':{'max_position_weight':0.20,'max_gross_exposure':1.0},'market':{}})
+  if gate.get('verdict')=='FAIL' or any(x.get('severity')=='fail' for x in gate.get('flags',[])):
+   logging.warning('SKILL_POSITION_GATE_REJECT %s %s',oid,gate);continue
   qty=nom/lim
   rows=db.execute("SELECT ts_ns,price,volume,side FROM trades WHERE exchange='kraken' AND symbol=? AND ts_ns>? ORDER BY ts_ns LIMIT 10000",(sym,created)).fetchall()
   for ts,price,volume,side in rows:
