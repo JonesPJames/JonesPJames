@@ -36,6 +36,10 @@ class Engine:
    if status=='WAITING':
     entry=price*(1+SLIP);qty=nom/lim
     if entry>lim or entry<=stop or qty>volume:continue
+    # Reject entries whose stop is inside the simulated spread/slippage noise.
+    # Existing open positions are unaffected; only new entries are screened.
+    if (entry-stop)/entry<D('.002'):continue
+    if (take-entry)/(entry-stop)<D('1.5'):continue
     debit=qty*entry*(1+FEE)
     risk=qty*(entry-stop)+debit*FEE+qty*entry*SLIP
     if risk>D(10) or self.weekly_loss(ts_ns)+risk>D(50):continue
